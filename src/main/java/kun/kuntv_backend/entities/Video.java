@@ -1,0 +1,41 @@
+package kun.kuntv_backend.entities;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "video")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class Video {
+
+    @Id
+    @GeneratedValue
+    @Setter(AccessLevel.NONE)
+    private UUID id;
+
+    @Column(nullable = false)
+    private String titolo;
+
+    @Column
+    private String tag;
+
+    @Column(nullable = false)
+    private int durata;  // Durata in secondi
+
+    @Column(nullable = false)
+    private String fileLink;
+
+    @ManyToOne
+    @JoinColumn(name = "sezione_id", nullable = false)
+    private Sezione sezione;
+
+    @ManyToOne
+    @JoinColumn(name = "stagione_id")
+    private Stagione stagione;
+}
+
