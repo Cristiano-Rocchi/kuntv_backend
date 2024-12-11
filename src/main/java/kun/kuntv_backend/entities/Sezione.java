@@ -24,6 +24,8 @@ public class Sezione {
 
     @Column(nullable = false)
     private String fotoUrl;
+    @Column
+    private String tag;
 
     @OneToMany(mappedBy = "sezione")
     private List<Video> videoList;

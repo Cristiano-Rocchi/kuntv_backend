@@ -21,8 +21,6 @@ public class Video {
     @Column(nullable = false)
     private String titolo;
 
-    @Column
-    private String tag;
 
     @Column(nullable = false)
     private int durata;  // Durata in secondi
