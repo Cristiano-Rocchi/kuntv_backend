@@ -23,7 +23,7 @@ public class Video {
 
 
     @Column(nullable = false)
-    private int durata;  // Durata in secondi
+    private String durata;
 
     @Column(nullable = false)
     private String fileLink;

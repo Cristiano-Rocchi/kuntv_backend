@@ -1,7 +1,10 @@
 package kun.kuntv_backend.services;
 
+import kun.kuntv_backend.entities.Sezione;
+import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.repositories.VideoRepository;
+import kun.kuntv_backend.repositories.StagioneRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,9 +15,11 @@ import java.util.UUID;
 public class VideoService {
 
     private final VideoRepository videoRepository;
+    private final StagioneRepository stagioneRepository;
 
-    public VideoService(VideoRepository videoRepository) {
+    public VideoService(VideoRepository videoRepository, StagioneRepository stagioneRepository) {
         this.videoRepository = videoRepository;
+        this.stagioneRepository = stagioneRepository;
     }
 
     // Ottieni tutti i video
@@ -38,9 +43,32 @@ public class VideoService {
     }
 
     // Crea un nuovo video (solo admin)
-    public Video createVideo(Video video) {
-        return videoRepository.save(video);
+    public Video createVideo(UUID stagioneId, Video video) {
+        // Recupera la stagione usando l'ID fornito
+        Optional<Stagione> stagioneOpt = stagioneRepository.findById(stagioneId);
+        if (stagioneOpt.isPresent()) {
+            Stagione stagione = stagioneOpt.get();
+            Sezione sezione = stagione.getSezione(); // Ottieni la sezione associata alla stagione
+
+            // Imposta la stagione e la sezione sul video
+            video.setStagione(stagione);
+            video.setSezione(sezione); // Associa la sezione al video
+
+            // Aggiungi il video alla lista della stagione
+            stagione.getVideoList().add(video); // Aggiungi il video alla lista di video della stagione
+
+            // Salva la stagione per assicurarti che la lista venga aggiornata nel database
+            stagioneRepository.save(stagione); // Salva la stagione aggiornata
+
+            // Salva il video nel database
+            return videoRepository.save(video);
+        } else {
+            // Gestisci l'errore nel caso in cui la stagione non esista
+            throw new IllegalArgumentException("Stagione non trovata con l'ID: " + stagioneId);
+        }
     }
+
+
 
     // Modifica un video esistente (solo admin)
     public Optional<Video> updateVideo(UUID id, Video updatedVideo) {

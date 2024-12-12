@@ -2,6 +2,7 @@ package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.services.VideoService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -42,9 +43,18 @@ public class VideoController {
     // Creazione di un nuovo video (solo admin)
     @PreAuthorize("hasRole('admin')")
     @PostMapping
-    public ResponseEntity<Video> createVideo(@RequestBody Video video) {
-        return ResponseEntity.ok(videoService.createVideo(video));
+    public ResponseEntity<Video> createVideo(@RequestParam UUID stagioneId, @RequestBody Video video) {
+        try {
+            // Passa l'ID della stagione al servizio per associarlo al video
+            Video createdVideo = videoService.createVideo(stagioneId, video);
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdVideo);
+        } catch (IllegalArgumentException e) {
+            // Gestisce l'errore se la stagione non è trovata
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+        }
     }
+
+
 
     // Modifica di un video esistente (solo admin)
     @PreAuthorize("hasRole('admin')")
