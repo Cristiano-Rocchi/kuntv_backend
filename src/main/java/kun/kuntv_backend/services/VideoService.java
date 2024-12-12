@@ -46,7 +46,7 @@ public class VideoService {
     public Optional<Video> updateVideo(UUID id, Video updatedVideo) {
         return videoRepository.findById(id).map(video -> {
             video.setTitolo(updatedVideo.getTitolo());
-            video.setTag(updatedVideo.getTag());
+
             video.setDurata(updatedVideo.getDurata());
             video.setFileLink(updatedVideo.getFileLink());
             video.setSezione(updatedVideo.getSezione());

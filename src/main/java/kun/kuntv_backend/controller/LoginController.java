@@ -19,7 +19,7 @@ public class LoginController {
 
     @PostMapping("/login")
     public ResponseEntity<String> login(@RequestBody SecretRequest secretRequest) {
-        System.out.println("Ricevuto segreto: " + secretRequest.getSecret()); // Log per debug
+
         String role = secretManager.verifySecret(secretRequest.getSecret());
         if ("invalid".equals(role)) {
             return ResponseEntity.status(403).body("Invalid secret");

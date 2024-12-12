@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/videos")
+@RequestMapping("/api/video")
 public class VideoController {
 
     private final VideoService videoService;

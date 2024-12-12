@@ -22,6 +22,9 @@ public class Stagione {
     @Column(nullable = false)
     private String titolo;
 
+    @Column(nullable = false)
+    private String anno;
+
     @ManyToOne
     @JoinColumn(name = "sezione_id", nullable = false)
     private Sezione sezione;

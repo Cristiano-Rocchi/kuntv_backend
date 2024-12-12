@@ -12,9 +12,7 @@ public class SecretManager {
     public SecretManager(String userSecret, String adminSecret) {
         this.userSecret = userSecret;
         this.adminSecret = adminSecret;
-        System.out.println("SecretManager inizializzato");
-        System.out.println("User secret: " + this.userSecret);
-        System.out.println("Admin secret: " + this.adminSecret);
+
     }
 
     // Verifica il segreto immesso e restituisce il ruolo
@@ -39,13 +37,13 @@ public class SecretManager {
 
     // Verifica se il segreto corrisponde a quello dell'admin
     public boolean isAdmin(String token) {
-        System.out.println("Verifica del segreto per il token: " + token); // Log per debugging
-        return token.equals(adminSecret);  // Assicurati che il confronto funzioni correttamente
+
+        return token.equals(adminSecret);
     }
 
 
     // Verifica se il segreto corrisponde a quello dell'utente
     public boolean isUser(String inputSecret) {
-        return inputSecret.equals(userSecret); // Verifica se il segreto è quello dell'utente
+        return inputSecret.equals(userSecret);
     }
 }

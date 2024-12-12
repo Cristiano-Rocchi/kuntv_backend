@@ -37,6 +37,8 @@ public class SezioneService {
         return sezioneRepository.findById(id).map(sezione -> {
             sezione.setTitolo(updatedSezione.getTitolo());
             sezione.setFotoUrl(updatedSezione.getFotoUrl());
+            sezione.setAnno(updatedSezione.getAnno());
+            sezione.setTag(updatedSezione.getTag());
             return sezioneRepository.save(sezione);
         });
     }

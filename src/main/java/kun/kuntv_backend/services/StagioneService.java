@@ -44,6 +44,7 @@ public class StagioneService {
         return stagioneRepository.findById(id).map(stagione -> {
             stagione.setTitolo(updatedStagione.getTitolo());
             stagione.setSezione(updatedStagione.getSezione());
+            stagione.setAnno(updatedStagione.getAnno());
             return stagioneRepository.save(stagione);
         });
     }
