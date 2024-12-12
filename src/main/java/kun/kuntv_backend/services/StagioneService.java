@@ -3,7 +3,9 @@ package kun.kuntv_backend.services;
 
 
 import kun.kuntv_backend.entities.Stagione;
+import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.repositories.StagioneRepository;
+import kun.kuntv_backend.repositories.VideoRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,9 +16,11 @@ import java.util.UUID;
 public class StagioneService {
 
     private final StagioneRepository stagioneRepository;
+    private final VideoRepository videoRepository;
 
-    public StagioneService(StagioneRepository stagioneRepository) {
+    public StagioneService(StagioneRepository stagioneRepository, VideoRepository videoRepository) {
         this.stagioneRepository = stagioneRepository;
+        this.videoRepository = videoRepository;
     }
 
     // Ottieni tutte le stagioni
@@ -51,11 +55,25 @@ public class StagioneService {
 
     // Cancella una stagione (solo admin)
     public boolean deleteStagione(UUID id) {
+        // Verifica se la stagione esiste
         if (stagioneRepository.existsById(id)) {
+            // Trova la stagione
+            Stagione stagione = stagioneRepository.findById(id).orElse(null);
+
+            // Se la stagione esiste, elimina i video associati
+            if (stagione != null) {
+                List<Video> videoList = videoRepository.findByStagioneId(id);
+                for (Video video : videoList) {
+                    videoRepository.delete(video); // Elimina il video
+                }
+            }
+
+            // Elimina la stagione
             stagioneRepository.deleteById(id);
             return true;
         }
         return false;
     }
+
 }
 

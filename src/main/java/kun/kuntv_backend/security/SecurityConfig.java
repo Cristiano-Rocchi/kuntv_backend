@@ -30,9 +30,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/sezioni", "/api/sezioni/**").permitAll()
 
                         // Permetti solo agli admin di fare operazioni CRUD su /api/sezioni (POST, PUT, DELETE)
-                        .requestMatchers(HttpMethod.POST, "/api/sezioni").hasRole("admin")
-                        .requestMatchers(HttpMethod.PUT, "/api/sezioni/**").hasRole("admin")
-                        .requestMatchers(HttpMethod.DELETE, "/api/sezioni/**").hasRole("admin")
+                        .requestMatchers(HttpMethod.POST, "/api/sezioni","/api/stagioni", "/api/video").hasRole("admin")
+                        .requestMatchers(HttpMethod.PUT, "/api/sezioni/**","/api/stagioni/**", "/api/video/**").hasRole("admin")
+                        .requestMatchers(HttpMethod.DELETE, "/api/sezioni/**","/api/stagioni/**", "/api/video/**").hasRole("admin")
 
                         // Le altre richieste necessitano di autenticazione
                         .anyRequest().authenticated()

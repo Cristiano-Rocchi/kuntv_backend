@@ -1,7 +1,11 @@
 package kun.kuntv_backend.services;
 
 import kun.kuntv_backend.entities.Sezione;
+import kun.kuntv_backend.entities.Stagione;
+import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.repositories.SezioneRepository;
+import kun.kuntv_backend.repositories.StagioneRepository;
+import kun.kuntv_backend.repositories.VideoRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,9 +16,13 @@ import java.util.UUID;
 public class SezioneService {
 
     private final SezioneRepository sezioneRepository;
+    private final StagioneRepository stagioneRepository;
+    private final VideoRepository videoRepository;
 
-    public SezioneService(SezioneRepository sezioneRepository) {
+    public SezioneService(SezioneRepository sezioneRepository, StagioneRepository stagioneRepository, VideoRepository videoRepository) {
         this.sezioneRepository = sezioneRepository;
+        this.stagioneRepository = stagioneRepository;
+        this.videoRepository = videoRepository;
     }
 
     // Ottieni tutte le sezioni (accessibile da tutti)
@@ -45,10 +53,25 @@ public class SezioneService {
 
     // Cancella una sezione (solo admin)
     public boolean deleteSezione(UUID id) {
+        // Verifica che la sezione esista
         if (sezioneRepository.existsById(id)) {
+            // Prima elimina tutte le stagioni associate alla sezione
+            List<Stagione> stagioni = stagioneRepository.findBySezioneId(id);
+            for (Stagione stagione : stagioni) {
+                // Per ogni stagione, elimina i video associati
+                List<Video> videoList = videoRepository.findByStagioneId(stagione.getId());
+                for (Video video : videoList) {
+                    videoRepository.delete(video);
+                }
+                // Poi elimina la stagione
+                stagioneRepository.delete(stagione);
+            }
+
+            // Finalmente, elimina la sezione
             sezioneRepository.deleteById(id);
             return true;
         }
         return false;
     }
+
 }
