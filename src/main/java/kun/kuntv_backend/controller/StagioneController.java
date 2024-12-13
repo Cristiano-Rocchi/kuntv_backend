@@ -55,6 +55,8 @@ public class StagioneController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+
+
     // Cancellazione di una stagione (solo admin)
     @PreAuthorize("hasRole('admin')")
     @DeleteMapping("/{id}")

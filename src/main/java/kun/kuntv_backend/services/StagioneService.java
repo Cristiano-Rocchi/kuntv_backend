@@ -44,14 +44,17 @@ public class StagioneService {
     }
 
     // Modifica una stagione esistente (solo admin)
-    public Optional<Stagione> updateStagione(UUID id, Stagione updatedStagione) {
-        return stagioneRepository.findById(id).map(stagione -> {
-            stagione.setTitolo(updatedStagione.getTitolo());
-            stagione.setSezione(updatedStagione.getSezione());
-            stagione.setAnno(updatedStagione.getAnno());
-            return stagioneRepository.save(stagione);
+    public Optional<Stagione> updateStagione(UUID id, Stagione stagione) {
+        return stagioneRepository.findById(id).map(existingStagione -> {
+            // Aggiorna i campi dell'entità esistente con i valori dal body
+            existingStagione.setTitolo(stagione.getTitolo());
+            existingStagione.setAnno(stagione.getAnno());
+            existingStagione.setSezione(stagione.getSezione());
+            return stagioneRepository.save(existingStagione);
         });
     }
+
+
 
     // Cancella una stagione (solo admin)
     public boolean deleteStagione(UUID id) {

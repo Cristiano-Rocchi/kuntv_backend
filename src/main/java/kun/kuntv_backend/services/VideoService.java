@@ -73,15 +73,28 @@ public class VideoService {
     // Modifica un video esistente (solo admin)
     public Optional<Video> updateVideo(UUID id, Video updatedVideo) {
         return videoRepository.findById(id).map(video -> {
+            // Aggiorna i dettagli del video
             video.setTitolo(updatedVideo.getTitolo());
-
             video.setDurata(updatedVideo.getDurata());
             video.setFileLink(updatedVideo.getFileLink());
-            video.setSezione(updatedVideo.getSezione());
-            video.setStagione(updatedVideo.getStagione());
+
+            // Se è stata fornita una nuova stagione, aggiorna anche la sezione
+            if (updatedVideo.getStagione() != null) {
+                Optional<Stagione> stagioneOpt = stagioneRepository.findById(updatedVideo.getStagione().getId());
+                if (stagioneOpt.isPresent()) {
+                    Stagione nuovaStagione = stagioneOpt.get();
+                    video.setStagione(nuovaStagione);
+                    video.setSezione(nuovaStagione.getSezione()); // Associa automaticamente la sezione della stagione
+                } else {
+                    throw new IllegalArgumentException("Stagione non trovata con ID: " + updatedVideo.getStagione().getId());
+                }
+            }
+
+            // Salva il video aggiornato
             return videoRepository.save(video);
         });
     }
+
 
     // Cancella un video (solo admin)
     public boolean deleteVideo(UUID id) {
