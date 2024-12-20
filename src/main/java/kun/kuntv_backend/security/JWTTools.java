@@ -24,7 +24,7 @@ public class JWTTools {
 
     public void verifyToken(String token) {
         try {
-            Jwts.parser()  // Usa parserBuilder() per evitare il deprecated
+            Jwts.parser()
                     .setSigningKey(Keys.hmacShaKeyFor(secret.getBytes()))  // Imposta la chiave segreta
                     .build()  // Costruisce il parser
                     .parseClaimsJws(token);  // Verifica il token
@@ -34,7 +34,7 @@ public class JWTTools {
     }
 
     public String extractRoleFromToken(String token) {
-        return Jwts.parser()  // Usa parserBuilder() per evitare il deprecated
+        return Jwts.parser()
                 .setSigningKey(Keys.hmacShaKeyFor(secret.getBytes()))  // Imposta la chiave segreta
                 .build()  // Costruisce il parser
                 .parseClaimsJws(token)  // Decodifica il token
