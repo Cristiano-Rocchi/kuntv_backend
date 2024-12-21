@@ -1,9 +1,10 @@
 package kun.kuntv_backend.services;
 
-import kun.kuntv_backend.entities.Sezione;
-import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
-
+import kun.kuntv_backend.entities.Stagione;
+import kun.kuntv_backend.entities.Sezione;
+import kun.kuntv_backend.exceptions.InternalServerErrorException;
+import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.repositories.VideoRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
@@ -11,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -19,11 +19,10 @@ import java.util.stream.Collectors;
 public class VideoService {
 
     @Autowired
-    private  VideoRepository videoRepository;
+    private VideoRepository videoRepository;
+
     @Autowired
     private StagioneRepository stagioneRepository;
-
-
 
     // Ottieni tutti i video
     public List<VideoRespDTO> getAllVideos() {
@@ -36,86 +35,75 @@ public class VideoService {
                         video.getFileLink(),
                         video.getStagione() != null ? video.getStagione().getTitolo() : null,
                         video.getSezione().getTitolo()
-
                 ))
                 .collect(Collectors.toList());
     }
 
-    // Ottieni video per ID
-    public Optional<Video> getVideoById(UUID id) {
-        return videoRepository.findById(id);
+
+
+    // Ottieni un video per ID
+    public Video getVideoById(UUID id) {
+        return videoRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("ID del video non valido: " + id));
     }
+
 
     // Ottieni video per sezione
     public List<Video> getVideosBySezioneId(UUID sezioneId) {
         return videoRepository.findBySezioneId(sezioneId);
     }
 
-    // Ottieni video per stagione (opzionale)
-    public List<Video> getVideosByStagioneId(UUID stagioneId) {
-        return videoRepository.findByStagioneId(stagioneId);
-    }
-
     // Crea un nuovo video (solo admin)
     public Video createVideo(UUID stagioneId, Video video) {
         // Recupera la stagione usando l'ID fornito
-        Optional<Stagione> stagioneOpt = stagioneRepository.findById(stagioneId);
-        if (stagioneOpt.isPresent()) {
-            Stagione stagione = stagioneOpt.get();
-            Sezione sezione = stagione.getSezione(); // Ottieni la sezione associata alla stagione
+        Stagione stagione = stagioneRepository.findById(stagioneId)
+                .orElseThrow(() -> new NotFoundException("Stagione non trovata con l'ID: " + stagioneId));
 
-            // Imposta la stagione e la sezione sul video
-            video.setStagione(stagione);
-            video.setSezione(sezione); // Associa la sezione al video
+        Sezione sezione = stagione.getSezione(); // Ottieni la sezione associata alla stagione
+        video.setStagione(stagione);
+        video.setSezione(sezione);
 
-            // Aggiungi il video alla lista della stagione
-            stagione.getVideoList().add(video); // Aggiungi il video alla lista di video della stagione
-
-            // Salva la stagione per assicurarti che la lista venga aggiornata nel database
-            stagioneRepository.save(stagione); // Salva la stagione aggiornata
-
-            // Salva il video nel database
+        try {
             return videoRepository.save(video);
-        } else {
-            // Gestisci l'errore nel caso in cui la stagione non esista
-            throw new IllegalArgumentException("Stagione non trovata con l'ID: " + stagioneId);
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante la creazione del video.");
         }
     }
 
-
-
     // Modifica un video esistente (solo admin)
-    public Optional<Video> updateVideo(UUID id, Video updatedVideo) {
-        return videoRepository.findById(id).map(video -> {
-            // Aggiorna i dettagli del video
-            video.setTitolo(updatedVideo.getTitolo());
-            video.setDurata(updatedVideo.getDurata());
-            video.setFileLink(updatedVideo.getFileLink());
+    public Video updateVideo(UUID id, Video updatedVideo) {
+        Video existingVideo = videoRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
 
-            // Se è stata fornita una nuova stagione, aggiorna anche la sezione
-            if (updatedVideo.getStagione() != null) {
-                Optional<Stagione> stagioneOpt = stagioneRepository.findById(updatedVideo.getStagione().getId());
-                if (stagioneOpt.isPresent()) {
-                    Stagione nuovaStagione = stagioneOpt.get();
-                    video.setStagione(nuovaStagione);
-                    video.setSezione(nuovaStagione.getSezione()); // Associa automaticamente la sezione della stagione
-                } else {
-                    throw new IllegalArgumentException("Stagione non trovata con ID: " + updatedVideo.getStagione().getId());
-                }
-            }
+        // Aggiorna i dettagli del video
+        existingVideo.setTitolo(updatedVideo.getTitolo());
+        existingVideo.setDurata(updatedVideo.getDurata());
+        existingVideo.setFileLink(updatedVideo.getFileLink());
 
-            // Salva il video aggiornato
-            return videoRepository.save(video);
-        });
+        // Se è stata fornita una nuova stagione, aggiorna anche la sezione
+        if (updatedVideo.getStagione() != null) {
+            Stagione stagione = stagioneRepository.findById(updatedVideo.getStagione().getId())
+                    .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + updatedVideo.getStagione().getId()));
+            existingVideo.setStagione(stagione);
+            existingVideo.setSezione(stagione.getSezione()); // Associa automaticamente la sezione della stagione
+        }
+
+        try {
+            return videoRepository.save(existingVideo);
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante l'aggiornamento del video.");
+        }
     }
-
 
     // Cancella un video (solo admin)
     public boolean deleteVideo(UUID id) {
-        if (videoRepository.existsById(id)) {
-            videoRepository.deleteById(id);
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
+        try {
+            videoRepository.delete(video);
             return true;
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante la cancellazione del video.");
         }
-        return false;
     }
 }

@@ -29,10 +29,10 @@ public class StagioneController {
     // Visualizzazione di una stagione per ID (user e admin)
     @GetMapping("/{id}")
     public ResponseEntity<Stagione> getStagioneById(@PathVariable UUID id) {
-        return stagioneService.getStagioneById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        Stagione stagione = stagioneService.getStagioneById(id); // Solleva NotFoundException se non trova la stagione
+        return ResponseEntity.ok(stagione);
     }
+
 
     // Visualizzazione di stagioni per una sezione (user e admin)
     @GetMapping("/sezione/{sezioneId}")
@@ -51,12 +51,8 @@ public class StagioneController {
     @PreAuthorize("hasRole('admin')")
     @PutMapping("/{id}")
     public ResponseEntity<Stagione> updateStagione(@PathVariable UUID id, @RequestBody Stagione stagione) {
-        return stagioneService.updateStagione(id, stagione)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        return ResponseEntity.ok(stagioneService.updateStagione(id, stagione));
     }
-
-
 
     // Cancellazione di una stagione (solo admin)
     @PreAuthorize("hasRole('admin')")

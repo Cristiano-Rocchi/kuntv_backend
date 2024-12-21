@@ -12,7 +12,6 @@ public class SecretManager {
     public SecretManager(String userSecret, String adminSecret) {
         this.userSecret = userSecret;
         this.adminSecret = adminSecret;
-
     }
 
     // Verifica il segreto immesso e restituisce il ruolo
@@ -21,7 +20,7 @@ public class SecretManager {
 
         // Controlla se inputSecret è null
         if (inputSecret == null) {
-            return "invalid"; // Ritorna "invalid" se il segreto è null
+            throw new IllegalArgumentException("Il segreto non può essere null"); // Aggiunta gestione errore
         }
 
         // Confronta i segreti solo se inputSecret non è null
@@ -34,13 +33,10 @@ public class SecretManager {
         }
     }
 
-
     // Verifica se il segreto corrisponde a quello dell'admin
     public boolean isAdmin(String token) {
-
         return token.equals(adminSecret);
     }
-
 
     // Verifica se il segreto corrisponde a quello dell'utente
     public boolean isUser(String inputSecret) {

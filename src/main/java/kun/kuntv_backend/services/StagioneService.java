@@ -1,10 +1,11 @@
 package kun.kuntv_backend.services;
 
-
-
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
+import kun.kuntv_backend.exceptions.InternalServerErrorException;
+import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.payloads.StagioneRespDTO;
+import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.repositories.StagioneRepository;
 import kun.kuntv_backend.repositories.VideoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,13 +19,10 @@ import java.util.stream.Collectors;
 @Service
 public class StagioneService {
 
-
     @Autowired
     private StagioneRepository stagioneRepository;
     @Autowired
     private VideoRepository videoRepository;
-
-
 
     // Ottieni tutte le stagioni
     public List<StagioneRespDTO> getAllStagioni() {
@@ -39,11 +37,28 @@ public class StagioneService {
                 ))
                 .collect(Collectors.toList());
     }
+    // Ottieni i video per stagione
+    public List<VideoRespDTO> getVideosByStagioneId(UUID stagioneId) {
+        List<Video> videos = videoRepository.findByStagioneId(stagioneId);
+
+        // Converte l'elenco di Video in VideoRespDTO
+        return videos.stream()
+                .map(video -> new VideoRespDTO(
+                        video.getId(),
+                        video.getTitolo(),
+                        video.getDurata(),
+                        video.getFileLink(),
+                        video.getStagione() != null ? video.getStagione().getTitolo() : null,
+                        video.getSezione().getTitolo()
+                ))
+                .collect(Collectors.toList());
+    }
 
 
     // Ottieni una stagione per ID
-    public Optional<Stagione> getStagioneById(UUID id) {
-        return stagioneRepository.findById(id);
+    public Stagione getStagioneById(UUID id) {
+        return stagioneRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + id));
     }
 
     // Ottieni stagioni per una sezione
@@ -53,43 +68,46 @@ public class StagioneService {
 
     // Crea una nuova stagione (solo admin)
     public Stagione createStagione(Stagione stagione) {
-        return stagioneRepository.save(stagione);
+        try {
+            return stagioneRepository.save(stagione);
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante la creazione della stagione.");
+        }
     }
 
     // Modifica una stagione esistente (solo admin)
-    public Optional<Stagione> updateStagione(UUID id, Stagione stagione) {
-        return stagioneRepository.findById(id).map(existingStagione -> {
-            // Aggiorna i campi dell'entità esistente con i valori dal body
+    public Stagione updateStagione(UUID id, Stagione stagione) {
+        Stagione existingStagione = stagioneRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + id));
+        try {
             existingStagione.setTitolo(stagione.getTitolo());
             existingStagione.setAnno(stagione.getAnno());
             existingStagione.setSezione(stagione.getSezione());
             return stagioneRepository.save(existingStagione);
-        });
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante l'aggiornamento della stagione.");
+        }
     }
-
-
 
     // Cancella una stagione (solo admin)
     public boolean deleteStagione(UUID id) {
-        // Verifica se la stagione esiste
-        if (stagioneRepository.existsById(id)) {
-            // Trova la stagione
+        if (!stagioneRepository.existsById(id)) {
+            throw new NotFoundException("Stagione non trovata con ID: " + id);
+        }
+        try {
             Stagione stagione = stagioneRepository.findById(id).orElse(null);
 
-            // Se la stagione esiste, elimina i video associati
             if (stagione != null) {
                 List<Video> videoList = videoRepository.findByStagioneId(id);
                 for (Video video : videoList) {
-                    videoRepository.delete(video); // Elimina il video
+                    videoRepository.delete(video);
                 }
             }
 
-            // Elimina la stagione
             stagioneRepository.deleteById(id);
             return true;
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante la cancellazione della stagione.");
         }
-        return false;
     }
-
 }
-

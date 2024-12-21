@@ -3,6 +3,8 @@ package kun.kuntv_backend.services;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
+import kun.kuntv_backend.exceptions.InternalServerErrorException;
+import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
 import kun.kuntv_backend.repositories.SezioneRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
@@ -25,8 +27,6 @@ public class SezioneService {
     @Autowired
     private VideoRepository videoRepository;
 
-
-
     // Ottieni tutte le sezioni (accessibile da tutti)
     public List<SezioneRespDTO> getAllSezioni() {
         List<Sezione> sezioni = sezioneRepository.findAll();
@@ -43,49 +43,51 @@ public class SezioneService {
                 .collect(Collectors.toList());
     }
 
-
     // Ottieni una sezione per ID (accessibile da tutti)
-    public Optional<Sezione> getSezioneById(UUID id) {
-        return sezioneRepository.findById(id);
+    public Sezione getSezioneById(UUID id) {
+        return sezioneRepository.findById(id).orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + id));
     }
 
     // Crea una nuova sezione (solo admin)
     public Sezione createSezione(Sezione sezione) {
-        return sezioneRepository.save(sezione);
+        try {
+            return sezioneRepository.save(sezione);
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante la creazione della sezione.");
+        }
     }
 
     // Modifica una sezione esistente (solo admin)
-    public Optional<Sezione> updateSezione(UUID id, Sezione updatedSezione) {
-        return sezioneRepository.findById(id).map(sezione -> {
+    public Sezione updateSezione(UUID id, Sezione updatedSezione) {
+        Sezione sezione = sezioneRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + id));
+        try {
             sezione.setTitolo(updatedSezione.getTitolo());
             sezione.setFotoUrl(updatedSezione.getFotoUrl());
             sezione.setAnno(updatedSezione.getAnno());
             sezione.setTag(updatedSezione.getTag());
             return sezioneRepository.save(sezione);
-        });
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante l'aggiornamento della sezione.");
+        }
     }
 
     // Cancella una sezione (solo admin)
     public boolean deleteSezione(UUID id) {
-        // Verifica che la sezione esista
-        if (sezioneRepository.existsById(id)) {
-            // Prima elimina tutte le stagioni associate alla sezione
+        if (!sezioneRepository.existsById(id)) {
+            throw new NotFoundException("Sezione non trovata con ID: " + id);
+        }
+        try {
             List<Stagione> stagioni = stagioneRepository.findBySezioneId(id);
             for (Stagione stagione : stagioni) {
-                // Per ogni stagione, elimina i video associati
                 List<Video> videoList = videoRepository.findByStagioneId(stagione.getId());
-                for (Video video : videoList) {
-                    videoRepository.delete(video);
-                }
-                // Poi elimina la stagione
+                videoRepository.deleteAll(videoList);
                 stagioneRepository.delete(stagione);
             }
-
-            // Finalmente, elimina la sezione
             sezioneRepository.deleteById(id);
             return true;
+        } catch (Exception e) {
+            throw new InternalServerErrorException("Errore durante la cancellazione della sezione.");
         }
-        return false;
     }
-
 }

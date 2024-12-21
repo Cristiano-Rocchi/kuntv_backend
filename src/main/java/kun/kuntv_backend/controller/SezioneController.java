@@ -18,8 +18,6 @@ public class SezioneController {
     @Autowired
     private SezioneService sezioneService;
 
-
-
     // Visualizzazione di tutte le sezioni (user e admin)
     @GetMapping
     public ResponseEntity<List<SezioneRespDTO>> getAllSezioni() {
@@ -29,10 +27,10 @@ public class SezioneController {
     // Visualizzazione di una sezione per ID (user e admin)
     @GetMapping("/{id}")
     public ResponseEntity<Sezione> getSezioneById(@PathVariable UUID id) {
-        return sezioneService.getSezioneById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        Sezione sezione = sezioneService.getSezioneById(id); // Solleva NotFoundException se non trova la sezione
+        return ResponseEntity.ok(sezione);
     }
+
 
     // Creazione di una sezione (solo admin)
     @PreAuthorize("hasRole('admin')")
@@ -45,10 +43,10 @@ public class SezioneController {
     @PreAuthorize("hasRole('admin')")
     @PutMapping("/{id}")
     public ResponseEntity<Sezione> updateSezione(@PathVariable UUID id, @RequestBody Sezione sezione) {
-        return sezioneService.updateSezione(id, sezione)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        Sezione updatedSezione = sezioneService.updateSezione(id, sezione); // Solleva NotFoundException se l'ID non esiste
+        return ResponseEntity.ok(updatedSezione);
     }
+
 
     // Cancellazione di una sezione (solo admin)
     @PreAuthorize("hasRole('admin')")
