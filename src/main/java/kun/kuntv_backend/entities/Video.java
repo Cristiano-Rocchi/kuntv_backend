@@ -1,5 +1,6 @@
 package kun.kuntv_backend.entities;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -30,10 +31,12 @@ public class Video {
 
     @ManyToOne
     @JoinColumn(name = "sezione_id", nullable = false)
+    @JsonBackReference("sezione-video")
     private Sezione sezione;
 
     @ManyToOne
     @JoinColumn(name = "stagione_id")
+    @JsonBackReference("stagione-video")
     private Stagione stagione;
 }
 
