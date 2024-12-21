@@ -38,5 +38,7 @@ public class Video {
     @JoinColumn(name = "stagione_id")
     @JsonBackReference("stagione-video")
     private Stagione stagione;
+
+
 }
 

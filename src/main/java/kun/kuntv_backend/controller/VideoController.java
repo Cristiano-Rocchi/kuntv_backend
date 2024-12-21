@@ -1,7 +1,10 @@
 package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Video;
+
+import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.services.VideoService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,15 +17,14 @@ import java.util.UUID;
 @RequestMapping("/api/video")
 public class VideoController {
 
-    private final VideoService videoService;
+    @Autowired
+    private VideoService videoService;
 
-    public VideoController(VideoService videoService) {
-        this.videoService = videoService;
-    }
+
 
     // Visualizzazione di tutti i video (user e admin)
     @GetMapping
-    public ResponseEntity<List<Video>> getAllVideos() {
+    public ResponseEntity<List<VideoRespDTO>> getAllVideos() {
         return ResponseEntity.ok(videoService.getAllVideos());
     }
 

@@ -3,28 +3,42 @@ package kun.kuntv_backend.services;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
+
+import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.repositories.VideoRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class VideoService {
 
-    private final VideoRepository videoRepository;
-    private final StagioneRepository stagioneRepository;
+    @Autowired
+    private  VideoRepository videoRepository;
+    @Autowired
+    private StagioneRepository stagioneRepository;
 
-    public VideoService(VideoRepository videoRepository, StagioneRepository stagioneRepository) {
-        this.videoRepository = videoRepository;
-        this.stagioneRepository = stagioneRepository;
-    }
+
 
     // Ottieni tutti i video
-    public List<Video> getAllVideos() {
-        return videoRepository.findAll();
+    public List<VideoRespDTO> getAllVideos() {
+        List<Video> videos = videoRepository.findAll();
+        return videos.stream()
+                .map(video -> new VideoRespDTO(
+                        video.getId(),
+                        video.getTitolo(),
+                        video.getDurata(),
+                        video.getFileLink(),
+                        video.getStagione() != null ? video.getStagione().getTitolo() : null,
+                        video.getSezione().getTitolo()
+
+                ))
+                .collect(Collectors.toList());
     }
 
     // Ottieni video per ID

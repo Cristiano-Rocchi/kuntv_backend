@@ -1,6 +1,7 @@
 package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Stagione;
+import kun.kuntv_backend.payloads.StagioneRespDTO;
 import kun.kuntv_backend.services.StagioneService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,7 +22,7 @@ public class StagioneController {
 
     // Visualizzazione di tutte le stagioni (user e admin)
     @GetMapping
-    public ResponseEntity<List<Stagione>> getAllStagioni() {
+    public ResponseEntity<List<StagioneRespDTO>> getAllStagioni() {
         return ResponseEntity.ok(stagioneService.getAllStagioni());
     }
 

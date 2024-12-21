@@ -1,7 +1,9 @@
 package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Sezione;
+import kun.kuntv_backend.payloads.SezioneRespDTO;
 import kun.kuntv_backend.services.SezioneService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,15 +15,14 @@ import java.util.UUID;
 @RequestMapping("/api/sezioni")
 public class SezioneController {
 
-    private final SezioneService sezioneService;
+    @Autowired
+    private SezioneService sezioneService;
 
-    public SezioneController(SezioneService sezioneService) {
-        this.sezioneService = sezioneService;
-    }
+
 
     // Visualizzazione di tutte le sezioni (user e admin)
     @GetMapping
-    public ResponseEntity<List<Sezione>> getAllSezioni() {
+    public ResponseEntity<List<SezioneRespDTO>> getAllSezioni() {
         return ResponseEntity.ok(sezioneService.getAllSezioni());
     }
 

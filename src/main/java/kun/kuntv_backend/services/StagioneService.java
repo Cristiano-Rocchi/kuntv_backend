@@ -4,29 +4,42 @@ package kun.kuntv_backend.services;
 
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
+import kun.kuntv_backend.payloads.StagioneRespDTO;
 import kun.kuntv_backend.repositories.StagioneRepository;
 import kun.kuntv_backend.repositories.VideoRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class StagioneService {
 
-    private final StagioneRepository stagioneRepository;
-    private final VideoRepository videoRepository;
 
-    public StagioneService(StagioneRepository stagioneRepository, VideoRepository videoRepository) {
-        this.stagioneRepository = stagioneRepository;
-        this.videoRepository = videoRepository;
-    }
+    @Autowired
+    private StagioneRepository stagioneRepository;
+    @Autowired
+    private VideoRepository videoRepository;
+
+
 
     // Ottieni tutte le stagioni
-    public List<Stagione> getAllStagioni() {
-        return stagioneRepository.findAll();
+    public List<StagioneRespDTO> getAllStagioni() {
+        List<Stagione> stagioni = stagioneRepository.findAll();
+        return stagioni.stream()
+                .map(stagione -> new StagioneRespDTO(
+                        stagione.getId(),
+                        stagione.getTitolo(),
+                        stagione.getAnno(),
+                        stagione.getSezione().getTitolo(),
+                        stagione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
+                ))
+                .collect(Collectors.toList());
     }
+
 
     // Ottieni una stagione per ID
     public Optional<Stagione> getStagioneById(UUID id) {
