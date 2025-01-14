@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -41,20 +42,31 @@ public class VideoController {
         return ResponseEntity.ok(response);
     }
 
-
-    // Creazione di un nuovo video (solo admin)
+    // Creazione di un nuovo video con caricamento su Google Drive (solo admin)
+    @PostMapping("/upload")
     @PreAuthorize("hasRole('admin')")
-    @PostMapping
-    public ResponseEntity<Video> createVideo(@RequestParam UUID stagioneId, @RequestBody Video video) {
+    public ResponseEntity<Video> createVideo(
+            @RequestParam UUID stagioneId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam String titolo,
+            @RequestParam String durata) {
+
         try {
-            Video createdVideo = videoService.createVideo(stagioneId, video);
+            // Creiamo un oggetto Video usando i parametri forniti
+            Video video = new Video();
+            video.setTitolo(titolo);
+            video.setDurata(durata);
+
+            // Chiamiamo il servizio per creare il video
+            Video createdVideo = videoService.createVideo(stagioneId, video, file);
             return ResponseEntity.status(201).body(createdVideo);
         } catch (NotFoundException e) {
-            return ResponseEntity.status(400).body(null); // Bad Request per stagione non trovata
+            return ResponseEntity.status(400).body(null); // Bad Request se la stagione non esiste
         } catch (InternalServerErrorException e) {
             return ResponseEntity.status(500).body(null); // Errore interno del server
         }
     }
+
 
     // Modifica di un video esistente (solo admin)
     @PreAuthorize("hasRole('admin')")
@@ -63,7 +75,6 @@ public class VideoController {
         Video updatedVideo = videoService.updateVideo(id, video); // Solleva NotFoundException se l'ID non esiste
         return ResponseEntity.ok(updatedVideo);
     }
-
 
     // Cancellazione di un video (solo admin)
     @PreAuthorize("hasRole('admin')")
