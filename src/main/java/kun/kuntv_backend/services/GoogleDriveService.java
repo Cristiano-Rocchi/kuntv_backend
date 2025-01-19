@@ -1,5 +1,6 @@
 package kun.kuntv_backend.services;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.drive.Drive;
@@ -13,11 +14,36 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
-
 @Service
 public class GoogleDriveService {
 
     private static final Logger logger = LoggerFactory.getLogger(GoogleDriveService.class);
+
+    private final GoogleAuthorizationCodeFlow googleAuthorizationCodeFlow;
+
+    public GoogleDriveService(GoogleAuthorizationCodeFlow googleAuthorizationCodeFlow) {
+        this.googleAuthorizationCodeFlow = googleAuthorizationCodeFlow;
+    }
+
+    /**
+     * Autentica l'utente admin e restituisce le credenziali.
+     */
+    public Credential authenticateAdmin() {
+        try {
+            // Prova a caricare le credenziali salvate per "admin"
+            Credential credential = googleAuthorizationCodeFlow.loadCredential("admin");
+            if (credential != null && credential.getAccessToken() != null) {
+                logger.info("Credenziali Google Drive caricate con successo.");
+                return credential;
+            } else {
+                logger.warn("Nessuna credenziale valida trovata per l'utente admin.");
+                return null;
+            }
+        } catch (IOException e) {
+            logger.error("Errore durante il caricamento delle credenziali Google Drive", e);
+            throw new RuntimeException("Errore durante l'autenticazione Google Drive", e);
+        }
+    }
 
     /**
      * Carica un file su Google Drive utilizzando il `Credential`.
