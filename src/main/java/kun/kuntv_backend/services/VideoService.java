@@ -1,5 +1,7 @@
 package kun.kuntv_backend.services;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Sezione;
@@ -8,15 +10,13 @@ import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.repositories.VideoRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
-import kun.kuntv_backend.controller.GoogleAuthController;
-import com.google.api.client.auth.oauth2.Credential;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -30,7 +30,7 @@ public class VideoService {
     private StagioneRepository stagioneRepository;
 
     @Autowired
-    private GoogleDriveService googleDriveService;
+    private Cloudinary cloudinary;
 
     public List<VideoRespDTO> getAllVideos() {
         List<Video> videos = videoRepository.findAll();
@@ -63,33 +63,17 @@ public class VideoService {
         video.setStagione(stagione);
         video.setSezione(sezione);
 
-        Path tempFile = null;
-
         try {
-            tempFile = Files.createTempFile(file.getOriginalFilename(), null);
-            file.transferTo(tempFile.toFile());
+            // Carica il file su Cloudinary
+            Map<String, Object> uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.emptyMap());
 
-            // Ottieni le credenziali
-            Credential credential = GoogleAuthController.getCredential();
-            if (credential == null) {
-                throw new IllegalStateException("Autenticazione non trovata. Devi autorizzarti prima.");
-            }
+            // Ottieni il link del file caricato
+            String fileLink = (String) uploadResult.get("secure_url");
+            video.setFileLink(fileLink);
 
-            // Carica su Google Drive
-            String driveFileId = googleDriveService.uploadFile(tempFile, file.getOriginalFilename(), file.getContentType(), credential);
-
-            video.setFileLink("https://drive.google.com/file/d/" + driveFileId + "/view");
             return videoRepository.save(video);
-        } catch (Exception e) {
-            throw new InternalServerErrorException("Errore durante la creazione del video su Google Drive: " + e.getMessage(), e);
-        } finally {
-            if (tempFile != null) {
-                try {
-                    Files.deleteIfExists(tempFile);
-                } catch (Exception ex) {
-                    System.err.println("Impossibile eliminare il file temporaneo: " + ex.getMessage());
-                }
-            }
+        } catch (IOException e) {
+            throw new InternalServerErrorException("Errore durante il caricamento del video su Cloudinary: " + e.getMessage(), e);
         }
     }
 

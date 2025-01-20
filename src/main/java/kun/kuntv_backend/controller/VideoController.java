@@ -42,7 +42,7 @@ public class VideoController {
         return ResponseEntity.ok(response);
     }
 
-    // Creazione di un nuovo video con caricamento su Google Drive (solo admin)
+    // Creazione di un nuovo video con caricamento su Cloudinary (solo admin)
     @PostMapping("/upload")
     @PreAuthorize("hasRole('admin')")
     public ResponseEntity<Video> createVideo(
@@ -66,7 +66,6 @@ public class VideoController {
             return ResponseEntity.status(500).body(null); // Errore interno del server
         }
     }
-
 
     // Modifica di un video esistente (solo admin)
     @PreAuthorize("hasRole('admin')")
