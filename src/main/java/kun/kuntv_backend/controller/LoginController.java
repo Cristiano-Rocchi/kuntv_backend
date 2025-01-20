@@ -4,8 +4,6 @@ import kun.kuntv_backend.config.SecretManager;
 import kun.kuntv_backend.security.JWTTools;
 import kun.kuntv_backend.exceptions.InvalidSecretException;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
-import kun.kuntv_backend.services.GoogleDriveService;
-import com.google.api.client.auth.oauth2.Credential;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,18 +14,15 @@ public class LoginController {
 
     private final SecretManager secretManager;
     private final JWTTools jwtTools;
-    private final GoogleDriveService googleDriveService;
 
-    public LoginController(SecretManager secretManager, JWTTools jwtTools, GoogleDriveService googleDriveService) {
+    public LoginController(SecretManager secretManager, JWTTools jwtTools) {
         this.secretManager = secretManager;
         this.jwtTools = jwtTools;
-        this.googleDriveService = googleDriveService;
     }
 
     @PostMapping("/login")
     public ResponseEntity<String> login(@RequestBody SecretRequest secretRequest) {
         try {
-            // Validazione del secret
             if (secretRequest == null || secretRequest.getSecret() == null || secretRequest.getSecret().isEmpty()) {
                 throw new InvalidSecretException("Segreto mancante o vuoto");
             }
@@ -39,18 +34,6 @@ public class LoginController {
 
             // Crea il token JWT con il ruolo
             String token = jwtTools.createToken(role);
-
-            // Se l'utente è admin, avvia l'autenticazione su Google Drive in modo asincrono
-            if ("admin".equals(role)) {
-                new Thread(() -> {
-                    try {
-                        googleDriveService.authenticateAdmin();
-                    } catch (Exception e) {
-                        // Log dell'errore senza interrompere il flusso di login
-                        System.err.println("Errore nell'autenticazione su Google Drive: " + e.getMessage());
-                    }
-                }).start();
-            }
 
             // Restituisci il token JWT
             return ResponseEntity.ok(token);

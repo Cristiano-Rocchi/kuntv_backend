@@ -65,7 +65,8 @@ public class VideoService {
 
         try {
             // Carica il file su Cloudinary
-            Map<String, Object> uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.emptyMap());
+            Map<String, Object> uploadResult = cloudinary.uploader().upload(file.getBytes(),
+                    ObjectUtils.asMap("resource_type", "video"));
 
             // Ottieni il link del file caricato
             String fileLink = (String) uploadResult.get("secure_url");
