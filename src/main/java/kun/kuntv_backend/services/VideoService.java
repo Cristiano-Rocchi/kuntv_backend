@@ -30,7 +30,7 @@ public class VideoService {
     private StagioneRepository stagioneRepository;
 
     @Autowired
-    private Cloudinary cloudinary;
+    private List<Cloudinary> cloudinaryAccounts;
 
     public List<VideoRespDTO> getAllVideos() {
         List<Video> videos = videoRepository.findAll();
@@ -63,19 +63,26 @@ public class VideoService {
         video.setStagione(stagione);
         video.setSezione(sezione);
 
-        try {
-            // Carica il file su Cloudinary
-            Map<String, Object> uploadResult = cloudinary.uploader().upload(file.getBytes(),
-                    ObjectUtils.asMap("resource_type", "video"));
+        Exception lastException = null;
 
-            // Ottieni il link del file caricato
-            String fileLink = (String) uploadResult.get("secure_url");
-            video.setFileLink(fileLink);
+        for (Cloudinary cloudinary : cloudinaryAccounts) {
+            try {
+                // Carica il file sul primo account disponibile
+                Map<String, Object> uploadResult = cloudinary.uploader().upload(file.getBytes(),
+                        ObjectUtils.asMap("resource_type", "video"));
 
-            return videoRepository.save(video);
-        } catch (IOException e) {
-            throw new InternalServerErrorException("Errore durante il caricamento del video su Cloudinary: " + e.getMessage(), e);
+                // Ottieni il link del file caricato
+                String fileLink = (String) uploadResult.get("secure_url");
+                video.setFileLink(fileLink);
+
+                return videoRepository.save(video);
+            } catch (IOException e) {
+                lastException = e; // Prova con il prossimo account
+            }
         }
+
+        throw new InternalServerErrorException("Errore durante il caricamento del video su Cloudinary: " +
+                (lastException != null ? lastException.getMessage() : "Nessun account disponibile"));
     }
 
     public Video updateVideo(UUID id, Video updatedVideo) {
