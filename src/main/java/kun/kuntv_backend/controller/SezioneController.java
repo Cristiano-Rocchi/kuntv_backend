@@ -1,6 +1,7 @@
 package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Sezione;
+import kun.kuntv_backend.enums.CollectionType;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
 import kun.kuntv_backend.services.SezioneService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,12 +33,14 @@ public class SezioneController {
     }
 
     // Creazione di una sezione associata a una Collection (solo admin)
-    @PreAuthorize("hasRole('admin')")
     @PostMapping
-    public ResponseEntity<Sezione> createSezione(@RequestBody Sezione sezione, @RequestParam UUID collectionId) {
-        Sezione createdSezione = sezioneService.createSezione(sezione, collectionId);
+    @PreAuthorize("hasRole('admin')")
+    public ResponseEntity<Sezione> createSezione(@RequestBody Sezione sezione) {
+        // Passa "SERIE_TV" come tipo direttamente
+        Sezione createdSezione = sezioneService.createSezione(sezione, CollectionType.SERIE_TV);
         return ResponseEntity.ok(createdSezione);
     }
+
 
     // Modifica di una sezione esistente (solo admin)
     @PreAuthorize("hasRole('admin')")

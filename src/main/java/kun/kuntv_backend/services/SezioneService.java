@@ -4,6 +4,7 @@ import kun.kuntv_backend.entities.Collection;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
+import kun.kuntv_backend.enums.CollectionType;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
 import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
@@ -52,21 +53,22 @@ public class SezioneService {
                 .collect(Collectors.toList());
     }
 
-
     // Ottieni una sezione per ID (accessibile da tutti)
     public Sezione getSezioneById(UUID id) {
         return sezioneRepository.findById(id).orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + id));
     }
 
-    // Crea una nuova sezione associata a una Collection (solo admin)
-    public Sezione createSezione(Sezione sezione, UUID collectionId) {
-        Optional<Collection> collection = collectionRepository.findById(collectionId);
-        if (collection.isEmpty()) {
-            throw new NotFoundException("Collection non trovata con ID: " + collectionId);
-        }
+    // Crea una nuova sezione associata a una Collection o crea dinamicamente la Collection (solo admin)
+    public Sezione createSezione(Sezione sezione, CollectionType tipo) {
+        Collection collection = collectionRepository.findByTipo(tipo)
+                .orElseGet(() -> {
+                    Collection newCollection = new Collection();
+                    newCollection.setTipo(tipo);
+                    return collectionRepository.save(newCollection);
+                });
 
         try {
-            sezione.setCollection(collection.get());
+            sezione.setCollection(collection);
             return sezioneRepository.save(sezione);
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore durante la creazione della sezione.");

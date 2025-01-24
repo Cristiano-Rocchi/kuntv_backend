@@ -1,5 +1,6 @@
 package kun.kuntv_backend.entities;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import kun.kuntv_backend.enums.CollectionType;
 import lombok.Getter;
@@ -23,8 +24,10 @@ public class Collection {
     private CollectionType tipo;
 
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference("collection-film")
     private List<Film> film;
 
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List <Sezione> sezioni;
+    @JsonManagedReference("collection-sezioni")
+    private List<Sezione> sezioni;
 }

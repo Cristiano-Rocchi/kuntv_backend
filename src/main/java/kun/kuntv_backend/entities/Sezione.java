@@ -1,5 +1,6 @@
 package kun.kuntv_backend.entities;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
@@ -42,6 +43,7 @@ public class Sezione {
 
     @ManyToOne
     @JoinColumn(name = "collection_id", nullable = false)
+    @JsonBackReference("collection-sezioni")
     private Collection collection;
 }
 

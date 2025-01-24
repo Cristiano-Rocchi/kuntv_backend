@@ -1,6 +1,7 @@
 package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Film;
+import kun.kuntv_backend.enums.CollectionType;
 import kun.kuntv_backend.services.FilmService;
 import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
@@ -25,7 +26,7 @@ public class FilmController {
     @PostMapping("/upload")
     @PreAuthorize("hasRole('admin')")
     public ResponseEntity<Film> createFilm(
-            @RequestParam UUID collectionId,
+            @RequestParam CollectionType tipo,
             @RequestParam("file") MultipartFile file,
             @RequestParam String titolo,
             @RequestParam String genere,
@@ -39,10 +40,8 @@ public class FilmController {
             film.setDurata(durata);
 
             // Chiamiamo il servizio per creare il film
-            Film createdFilm = filmService.createFilm(film, collectionId, file);
+            Film createdFilm = filmService.createFilm(film, tipo, file);
             return ResponseEntity.status(201).body(createdFilm);
-        } catch (NotFoundException e) {
-            return ResponseEntity.status(404).body(null); // Collection non trovata
         } catch (InternalServerErrorException e) {
             return ResponseEntity.status(500).body(null); // Errore durante il caricamento
         }

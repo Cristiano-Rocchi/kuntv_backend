@@ -1,5 +1,6 @@
 package kun.kuntv_backend.entities;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,6 +22,7 @@ public class Film {
 
     @ManyToOne
     @JoinColumn(name = "collection_id")
+    @JsonBackReference("collection-film")
     private Collection collection;
 
 }
