@@ -1,6 +1,13 @@
 *BETA
 website streaming video di serie animate, niente registrazione, accesso al sito tramite codice segreto. sezione per gli admin con codice segreto diverso dallo user.
-i video saranno raccolti in sezioni(esempio i simpson), e in stagioni(se presenti).
+possibilità di caricare sia film che serie tv.
+
+GESTIONE IMMAGINI E VIDEO
+la gestione delle immagini e video sara affidata a cloudinary con un sistema multi account(*vedere sezione ***cloudinary-multiaccount*****)
+
+CARICAMENTO VIDEO SERIE TV
+
+i video saranno raccolti in sezioni(esempio i simpson), e in stagioni(stagione 1).
 le SEZIONI hanno un titolo obbligatorio(i simpson), un tag obbligatorio(Generi), l'anno o gli anni in cui è stata trasmessa(esempio "2010-in corso") e un immagine di copertina obbligatoria.
 Le STAGIONI hanno un titolo e l'anno.
 i VIDEO hanno un titolo obbligatorio(esempio puntata 1, puntata 2...), una durata in stringa obbligatoria (esempio "35 min") e un file video obbligatorio
@@ -8,13 +15,20 @@ i VIDEO hanno un titolo obbligatorio(esempio puntata 1, puntata 2...), una durat
 Gli UTENTI hanno la possibilità di vedere tutto il catalogo dei video
 Gli ADMIN hanno la possibilità di vedere caricare modificare o eliminare video,stagioni o sezioni tramite una pagina dedicata.
 
-RICERCHE
-possibilità di cercare singoli video, sezioni o stagioni.
-la ricerca principale sara solo delle sezioni(esempio ricerca "simpson"), dentro la sezione sara possibile cercare per stagioni(esempio "stagione 1"), nelle stagioni sara possibile cercare i singoli episodi("puntata 1").
-Ricerche abilitate sia per nome tramite form o per nome tramite dropdown
+*per gli ENDPOINT vedere sezione ENDPOINT - SERIE TV*
 
-GESTIONE IMMAGINI E VIDEO
-la gestione delle immagini sara affidata a cloudinary mentre per la gestione dei video vengono caricati su Google Drive tramite un sistema multi-account (16 account iniziali, con la possibilità di aggiungerne altri in futuro). Il backend gestisce l'autenticazione tramite credenziali OAuth di Google per ogni account, e i file vengono distribuiti tra gli account in base allo spazio disponibile.
+
+CARICAMENTO FILM
+i film saranno caricati senza avere sezioni o stagioni quindi per creare un oggetto bastera semplicemente specificare che sia di tipo film.
+quindi i film avranno un tipo(FILM in maiuscolo), un file(il file video), un titolo("evilenko"), un genere("drammatico"),una durata("1h 30min")
+
+Gli UTENTI hanno la possibilità di vedere tutto il catalogo dei film
+Gli ADMIN hanno la possibilità di vedere caricare modificare o eliminare video,stagioni o sezioni tramite una pagina dedicata.
+
+*per gli ENDPOINT vedere sezione ENDPOINT - FILM*
+
+
+
 
 
 
@@ -31,20 +45,54 @@ la gestione delle immagini sara affidata a cloudinary mentre per la gestione dei
 
 
 **********************************ENDPOINT*******************************************************
-LOGIN con chiave segreta
-
-GET aperto a tutti gli user
-
+GET aperto a tutti gli utenti
 POST,PUT,DELETE solo per admin
-per la creazione oggetti seguire il flusso delle correlazioni tra tabelle(Sezione,Stagioni,video)
+per la creazione oggetti SERIE_TV seguire il flusso delle correlazioni tra tabelle(Sezione,Stagioni,video)
 
----------------------------POST-------------------------------
 
-LOGIN
+
+..............LOGIN..................
+con chiave segreta
+
+--------POST-------
 /auth/login
 {
 "secret" :[inserire segreto]
 } 
+
+
+
+..............FILM..............
+
+-------POST------------
+api/film/upload
+
+nel body scegliere multipart/form-data
+
+key tipo        - value FILM
+key file	- value Seleziona un file video dal tuo sistema.
+key titolo	- value Evilenko
+key genere	- value drammatico
+key durata	- value 1h 30min
+
+-------GET-----------
+api/film  (restituisce tutti i film)
+api/film/{id}  (restituisce il singolo film cercato)
+
+-------PUT------------
+DA TESTARE
+
+
+-------DELETE---------
+DA TESTARE
+
+
+
+..............SERIE TV.............
+
+----------------POST-----------------
+
+
 
 
 SEZIONI
@@ -68,12 +116,14 @@ STAGIONI
 }
 
 VIDEO
- api/video?stagioneId={inserire id stagione}
-{
-  "titolo": "Video Esempio",
-  "durata": "30:00",
-  "fileLink": "https://examplevideo.com/video.mp4"
-}
+api/video/upload
+
+nel body scegliere multipart/form-data
+
+key stagioneId  - value <UUID della stagione esistente>
+key file	- value Seleziona un file video dal tuo sistema.
+key titolo	- value Episodio 1
+key durata	- value 10m 30s
 
 
 ------------------------------PUT-------------------------
@@ -86,15 +136,7 @@ api/stagioni{stagioneID}
 body uguale a post
 
 VIDEO
-api/video{videoID}
-{
-  "titolo": "Video Aggiornato",
-  "durata": "1h 30min",
-  "fileLink": "https://esempio.com/nuovo_video.mp4",
-  "stagione": {
-    "id": "uuid stagione"
-  }
-}
+DA TESTARE
 
 ----------------------------DELETE----------------------------
 Attenzione eliminando una sezione o stagione si elimina tutto cio che c'è associato ad essa
@@ -103,10 +145,10 @@ SEZIONI
 api/sezioni/{sezioneID}
 
 STAGIONI
-api/stagioni{stagioneID}
+api/stagioni/{stagioneID}
 
 VIDEO
-api/video{videoID}
+api/video/{videoID}
 
 
 
@@ -122,3 +164,38 @@ ERRORI GESTITI:
 -errore nel inserimento del secret per accedere
 -errore nella creazione degli oggetti(sezioni,stagioni,video)
 -errore nel recupero degli oggetti specifici qual'ora l'id inserito nell endpoint fosse sbagliato( esempio /api/video/7huhd7838 <---id sbagliato)
+
+
+
+
+*********************************AGGIUNGERE UN ALTRO ACCOUNT CLOUDINARY**************************************
+per la configurazione dell'account principale vedere foglio idee.txt
+
+apportare modifiche alla classe CloudinaryConfig nella directory config
+
+---------1. aggiungere un altro account al bean CloudinaryAccounts-----------
+esempio:
+    @Value("${cloudinary.name.account666}") String name666,
+    @Value("${cloudinary.key.account666}") String key666,
+    @Value("${cloudinary.secret.account666}") String secret666)
+
+------------2. aggiungere un nuovo map----------------
+esempio
+ Map<String, String> config666 = new HashMap<>();
+        config3.put("cloud_name", name666);
+        config3.put("api_key", key666);
+        config3.put("api_secret", secret666);
+        accounts.add(new Cloudinary(config666));
+
+----------3. aggiungere variabili d'ambiente application properties---------------
+esempio
+cloudinary.name.account666=${CLOUDINARY_NAME_666}
+cloudinary.key.account666=${CLOUDINARY_KEY_666}
+cloudinary.secret.account666=${CLOUDINARY_SECRET_666}
+
+-----------4. aggiungere variabili d'ambiente env.properties---------------
+CLOUDINARY_NAME_3=your-666-cloud-name
+CLOUDINARY_KEY_3=your-666-api-key
+CLOUDINARY_SECRET_3=your-666-api-secret
+
+
