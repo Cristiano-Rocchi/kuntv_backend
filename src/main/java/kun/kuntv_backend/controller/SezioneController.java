@@ -5,8 +5,8 @@ import kun.kuntv_backend.payloads.SezioneRespDTO;
 import kun.kuntv_backend.services.SezioneService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,26 +27,25 @@ public class SezioneController {
     // Visualizzazione di una sezione per ID (user e admin)
     @GetMapping("/{id}")
     public ResponseEntity<Sezione> getSezioneById(@PathVariable UUID id) {
-        Sezione sezione = sezioneService.getSezioneById(id); // Solleva NotFoundException se non trova la sezione
+        Sezione sezione = sezioneService.getSezioneById(id);
         return ResponseEntity.ok(sezione);
     }
 
-
-    // Creazione di una sezione (solo admin)
+    // Creazione di una sezione associata a una Collection (solo admin)
     @PreAuthorize("hasRole('admin')")
     @PostMapping
-    public ResponseEntity<Sezione> createSezione(@RequestBody Sezione sezione) {
-        return ResponseEntity.ok(sezioneService.createSezione(sezione));
+    public ResponseEntity<Sezione> createSezione(@RequestBody Sezione sezione, @RequestParam UUID collectionId) {
+        Sezione createdSezione = sezioneService.createSezione(sezione, collectionId);
+        return ResponseEntity.ok(createdSezione);
     }
 
-    // Modifica di una sezione (solo admin)
+    // Modifica di una sezione esistente (solo admin)
     @PreAuthorize("hasRole('admin')")
     @PutMapping("/{id}")
     public ResponseEntity<Sezione> updateSezione(@PathVariable UUID id, @RequestBody Sezione sezione) {
-        Sezione updatedSezione = sezioneService.updateSezione(id, sezione); // Solleva NotFoundException se l'ID non esiste
+        Sezione updatedSezione = sezioneService.updateSezione(id, sezione);
         return ResponseEntity.ok(updatedSezione);
     }
-
 
     // Cancellazione di una sezione (solo admin)
     @PreAuthorize("hasRole('admin')")

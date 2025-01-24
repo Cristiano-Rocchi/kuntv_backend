@@ -39,5 +39,9 @@ public class Sezione {
     @OneToMany(mappedBy = "sezione")
     @JsonManagedReference("sezione-stagioni")
     private List<Stagione> stagioni;
+
+    @ManyToOne
+    @JoinColumn(name = "collection_id", nullable = false)
+    private Collection collection;
 }
 

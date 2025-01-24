@@ -1,11 +1,13 @@
 package kun.kuntv_backend.services;
 
+import kun.kuntv_backend.entities.Collection;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
 import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
+import kun.kuntv_backend.repositories.CollectionRepository;
 import kun.kuntv_backend.repositories.SezioneRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
 import kun.kuntv_backend.repositories.VideoRepository;
@@ -22,10 +24,15 @@ public class SezioneService {
 
     @Autowired
     private SezioneRepository sezioneRepository;
+
     @Autowired
     private StagioneRepository stagioneRepository;
+
     @Autowired
     private VideoRepository videoRepository;
+
+    @Autowired
+    private CollectionRepository collectionRepository;
 
     // Ottieni tutte le sezioni (accessibile da tutti)
     public List<SezioneRespDTO> getAllSezioni() {
@@ -38,19 +45,28 @@ public class SezioneService {
                         sezione.getTag(),
                         sezione.getAnno(),
                         sezione.getStagioni().stream().map(Stagione::getTitolo).collect(Collectors.toList()),
-                        sezione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
+                        sezione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList()),
+                        sezione.getCollection().getId(), // Aggiungiamo l'ID della Collection
+                        sezione.getCollection().getTipo().name() // Aggiungiamo il tipo della Collection
                 ))
                 .collect(Collectors.toList());
     }
+
 
     // Ottieni una sezione per ID (accessibile da tutti)
     public Sezione getSezioneById(UUID id) {
         return sezioneRepository.findById(id).orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + id));
     }
 
-    // Crea una nuova sezione (solo admin)
-    public Sezione createSezione(Sezione sezione) {
+    // Crea una nuova sezione associata a una Collection (solo admin)
+    public Sezione createSezione(Sezione sezione, UUID collectionId) {
+        Optional<Collection> collection = collectionRepository.findById(collectionId);
+        if (collection.isEmpty()) {
+            throw new NotFoundException("Collection non trovata con ID: " + collectionId);
+        }
+
         try {
+            sezione.setCollection(collection.get());
             return sezioneRepository.save(sezione);
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore durante la creazione della sezione.");
