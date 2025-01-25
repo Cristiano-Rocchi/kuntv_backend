@@ -70,6 +70,10 @@ public class FilmService {
         return filmRepository.findAll();
     }
 
+    public Film updateFilm(Film film) {
+        return filmRepository.save(film);
+    }
+
     public void deleteFilm(Long id) {
         if (!filmRepository.existsById(id)) {
             throw new NotFoundException("Film not found with ID: " + id);

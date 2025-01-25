@@ -61,6 +61,39 @@ public class FilmController {
                 .orElseGet(() -> ResponseEntity.status(404).body(null));
     }
 
+
+    // Modifica di un film (solo admin)
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('admin')")
+    public ResponseEntity<Film> updateFilm(@PathVariable Long id, @RequestBody Film film) {
+        try {
+            // Recupera il film esistente
+            Film existingFilm = filmService.getFilmById(id)
+                    .orElseThrow(() -> new NotFoundException("Film non trovato con id: " + id));
+
+            // Aggiorna solo i campi forniti
+            if (film.getTitolo() != null) {
+                existingFilm.setTitolo(film.getTitolo());
+            }
+            if (film.getGenere() != null) {
+                existingFilm.setGenere(film.getGenere());
+            }
+            if (film.getDurata() != null) {
+                existingFilm.setDurata(film.getDurata());
+            }
+
+            // Salva e restituisci il film aggiornato
+            Film updatedFilm = filmService.updateFilm(existingFilm);
+            return ResponseEntity.ok(updatedFilm);
+        } catch (NotFoundException e) {
+            return ResponseEntity.status(404).build(); // Film non trovato
+        } catch (Exception e) {
+            return ResponseEntity.status(500).build(); // Errore interno
+        }
+    }
+
+
     // Cancellazione di un film (solo admin)
     @PreAuthorize("hasRole('admin')")
     @DeleteMapping("/{id}")

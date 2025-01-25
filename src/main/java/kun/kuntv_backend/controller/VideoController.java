@@ -68,12 +68,31 @@ public class VideoController {
     }
 
     // Modifica di un video esistente (solo admin)
-    @PreAuthorize("hasRole('admin')")
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('admin')")
     public ResponseEntity<Video> updateVideo(@PathVariable UUID id, @RequestBody Video video) {
-        Video updatedVideo = videoService.updateVideo(id, video); // Solleva NotFoundException se l'ID non esiste
-        return ResponseEntity.ok(updatedVideo);
+        try {
+            // Recupera il video esistente
+            Video existingVideo = videoService.getVideoById(id);
+
+            // Aggiorna solo i campi forniti
+            if (video.getTitolo() != null) {
+                existingVideo.setTitolo(video.getTitolo());
+            }
+            if (video.getDurata() != null) {
+                existingVideo.setDurata(video.getDurata());
+            }
+
+            // Salva e restituisci il video aggiornato
+            Video updatedVideo = videoService.updateVideo(id, existingVideo);
+            return ResponseEntity.ok(updatedVideo);
+        } catch (NotFoundException e) {
+            return ResponseEntity.status(404).build(); // Video non trovato
+        } catch (Exception e) {
+            return ResponseEntity.status(500).build(); // Errore interno
+        }
     }
+
 
     // Cancellazione di un video (solo admin)
     @PreAuthorize("hasRole('admin')")
