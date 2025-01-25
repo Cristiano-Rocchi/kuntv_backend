@@ -26,7 +26,7 @@ public class FilmController {
     @PostMapping("/upload")
     @PreAuthorize("hasRole('admin')")
     public ResponseEntity<Film> createFilm(
-            @RequestParam CollectionType tipo,
+            @RequestParam(required = false, defaultValue = "FILM") CollectionType tipo, // Default a FILM
             @RequestParam("file") MultipartFile file,
             @RequestParam String titolo,
             @RequestParam String genere,
@@ -46,6 +46,7 @@ public class FilmController {
             return ResponseEntity.status(500).body(null); // Errore durante il caricamento
         }
     }
+
 
     // Visualizzazione di tutti i film (user e admin)
     @GetMapping
