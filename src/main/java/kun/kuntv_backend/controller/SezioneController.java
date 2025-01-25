@@ -2,12 +2,14 @@ package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.enums.CollectionType;
+import kun.kuntv_backend.exceptions.InternalServerErrorException;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
 import kun.kuntv_backend.services.SezioneService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -35,10 +37,25 @@ public class SezioneController {
     // Creazione di una sezione associata a una Collection (solo admin)
     @PostMapping
     @PreAuthorize("hasRole('admin')")
-    public ResponseEntity<Sezione> createSezione(@RequestBody Sezione sezione) {
-        // Passa "SERIE_TV" come tipo direttamente
-        Sezione createdSezione = sezioneService.createSezione(sezione, CollectionType.SERIE_TV);
-        return ResponseEntity.ok(createdSezione);
+    public ResponseEntity<Sezione> createSezione(
+            @RequestParam String titolo,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String anno, // Cambiato da Integer a String
+            @RequestParam("file") MultipartFile file) {
+
+        try {
+            // Creiamo un oggetto Sezione
+            Sezione sezione = new Sezione();
+            sezione.setTitolo(titolo);
+            sezione.setTag(tag);
+            sezione.setAnno(anno); // Assegniamo direttamente la stringa
+
+            // Passiamo i dati e il file al servizio
+            Sezione createdSezione = sezioneService.createSezione(sezione, CollectionType.SERIE_TV, file);
+            return ResponseEntity.status(201).body(createdSezione);
+        } catch (InternalServerErrorException e) {
+            return ResponseEntity.status(500).body(null); // Errore interno
+        }
     }
 
 
