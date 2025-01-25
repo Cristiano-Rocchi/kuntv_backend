@@ -26,24 +26,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
         httpSecurity
-                .csrf(csrf -> csrf.disable())  // Disabilita CSRF se non necessario
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Aggiungi questa linea
                 .authorizeHttpRequests(auth -> auth
-                        // Permetti accesso a /auth/login senza autenticazione
                         .requestMatchers("/auth/login").permitAll()
-
-                        // Permetti GET per /api/sezioni e /api/sezioni/{id} a tutti (user e admin)
                         .requestMatchers(HttpMethod.GET, "/api/sezioni", "/api/sezioni/**").permitAll()
-
-                        // Permetti solo agli admin di fare operazioni CRUD su /api/sezioni (POST, PUT, DELETE)
-                        .requestMatchers(HttpMethod.POST, "/api/sezioni","/api/stagioni", "/api/video").hasRole("admin")
-                        .requestMatchers(HttpMethod.PUT, "/api/sezioni/**","/api/stagioni/**", "/api/video/**").hasRole("admin")
-                        .requestMatchers(HttpMethod.DELETE, "/api/sezioni/**","/api/stagioni/**", "/api/video/**").hasRole("admin")
-
-                        // Le altre richieste necessitano di autenticazione
+                        .requestMatchers(HttpMethod.POST, "/api/sezioni", "/api/stagioni", "/api/video").hasRole("admin")
+                        .requestMatchers(HttpMethod.PUT, "/api/sezioni/**", "/api/stagioni/**", "/api/video/**").hasRole("admin")
+                        .requestMatchers(HttpMethod.DELETE, "/api/sezioni/**", "/api/stagioni/**", "/api/video/**").hasRole("admin")
                         .anyRequest().authenticated()
                 )
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))  // Gestione stateless
-                .addFilterBefore(jwtCheckFilter, UsernamePasswordAuthenticationFilter.class); // Aggiungi il filtro JWT prima del filtro di autenticazione
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(jwtCheckFilter, UsernamePasswordAuthenticationFilter.class);
         return httpSecurity.build();
     }
 
