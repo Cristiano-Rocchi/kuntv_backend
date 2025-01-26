@@ -1,11 +1,14 @@
 package kun.kuntv_backend.services;
 
+import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
 import kun.kuntv_backend.exceptions.NotFoundException;
+import kun.kuntv_backend.payloads.NewStagioneDTO;
 import kun.kuntv_backend.payloads.StagioneRespDTO;
 import kun.kuntv_backend.payloads.VideoRespDTO;
+import kun.kuntv_backend.repositories.SezioneRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
 import kun.kuntv_backend.repositories.VideoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +26,9 @@ public class StagioneService {
     private StagioneRepository stagioneRepository;
     @Autowired
     private VideoRepository videoRepository;
+    @Autowired
+    private SezioneRepository sezioneRepository;
+
 
     // Ottieni tutte le stagioni
     public List<StagioneRespDTO> getAllStagioni() {
@@ -67,13 +73,24 @@ public class StagioneService {
     }
 
     // Crea una nuova stagione (solo admin)
-    public Stagione createStagione(Stagione stagione) {
+    public Stagione createStagione(NewStagioneDTO dto) {
+        // Recupera la sezione dal database utilizzando l'ID fornito
+        Sezione sezione = sezioneRepository.findById(dto.getSezioneId())
+                .orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + dto.getSezioneId()));
+
+        // Crea un nuovo oggetto Stagione
+        Stagione stagione = new Stagione();
+        stagione.setTitolo(dto.getTitolo());
+        stagione.setAnno(dto.getAnno());
+        stagione.setSezione(sezione); // Associa la sezione alla stagione
+
         try {
             return stagioneRepository.save(stagione);
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore durante la creazione della stagione.");
         }
     }
+
 
     // Modifica una stagione esistente (solo admin)
     public Stagione updateStagione(UUID id, Stagione stagione) {

@@ -1,6 +1,7 @@
 package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Stagione;
+import kun.kuntv_backend.payloads.NewStagioneDTO;
 import kun.kuntv_backend.payloads.StagioneRespDTO;
 import kun.kuntv_backend.services.StagioneService;
 import org.springframework.http.ResponseEntity;
@@ -43,9 +44,10 @@ public class StagioneController {
     // Creazione di una nuova stagione (solo admin)
     @PreAuthorize("hasRole('admin')")
     @PostMapping
-    public ResponseEntity<Stagione> createStagione(@RequestBody Stagione stagione) {
-        return ResponseEntity.ok(stagioneService.createStagione(stagione));
+    public ResponseEntity<Stagione> createStagione(@RequestBody NewStagioneDTO newStagioneDTO) {
+        return ResponseEntity.ok(stagioneService.createStagione(newStagioneDTO));
     }
+
 
     // Modifica di una stagione esistente (solo admin)
     @PreAuthorize("hasRole('admin')")

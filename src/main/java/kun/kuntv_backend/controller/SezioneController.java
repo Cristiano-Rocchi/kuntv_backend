@@ -3,6 +3,7 @@ package kun.kuntv_backend.controller;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.enums.CollectionType;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
+import kun.kuntv_backend.payloads.NewSezioneDTO;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
 import kun.kuntv_backend.services.SezioneService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,26 +38,26 @@ public class SezioneController {
     // Creazione di una sezione associata a una Collection (solo admin)
     @PostMapping
     @PreAuthorize("hasRole('admin')")
-    public ResponseEntity<Sezione> createSezione(
-            @RequestParam String titolo,
-            @RequestParam(required = false) String tag,
-            @RequestParam(required = false) String anno, // Cambiato da Integer a String
-            @RequestParam("file") MultipartFile file) {
-
+    public ResponseEntity<Sezione> createSezione(@ModelAttribute NewSezioneDTO newSezioneDTO) {
         try {
             // Creiamo un oggetto Sezione
             Sezione sezione = new Sezione();
-            sezione.setTitolo(titolo);
-            sezione.setTag(tag);
-            sezione.setAnno(anno); // Assegniamo direttamente la stringa
+            sezione.setTitolo(newSezioneDTO.getTitolo());
+            sezione.setTag(newSezioneDTO.getTag());
+            sezione.setAnno(newSezioneDTO.getAnno());
 
             // Passiamo i dati e il file al servizio
-            Sezione createdSezione = sezioneService.createSezione(sezione, CollectionType.SERIE_TV, file);
+            Sezione createdSezione = sezioneService.createSezione(
+                    sezione,
+                    CollectionType.SERIE_TV,
+                    newSezioneDTO.getFile()
+            );
             return ResponseEntity.status(201).body(createdSezione);
         } catch (InternalServerErrorException e) {
-            return ResponseEntity.status(500).body(null); // Errore interno
+            return ResponseEntity.status(500).body(null); 
         }
     }
+
 
 
     // Modifica di una sezione esistente (solo admin)
