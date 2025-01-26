@@ -48,17 +48,26 @@ public class VideoController {
     @PreAuthorize("hasRole('admin')")
     public ResponseEntity<Video> createVideo(
             @RequestParam("file") MultipartFile file,
-            @RequestBody NewVideoDTO newVideoDTO) {
+            @RequestParam String titolo,
+            @RequestParam String durata,
+            @RequestParam UUID stagioneId) {
         try {
-            // Chiamiamo il servizio per creare il video
+            // Crea un oggetto NewVideoDTO dai parametri
+            NewVideoDTO newVideoDTO = new NewVideoDTO();
+            newVideoDTO.setTitolo(titolo);
+            newVideoDTO.setDurata(durata);
+            newVideoDTO.setStagioneId(stagioneId);
+
+            // Chiama il servizio per creare il video
             Video createdVideo = videoService.createVideo(newVideoDTO, file);
             return ResponseEntity.status(201).body(createdVideo);
         } catch (NotFoundException e) {
-            return ResponseEntity.status(400).body(null); // Bad Request se la stagione non esiste
+            return ResponseEntity.status(400).body(null); // Stagione non trovata
         } catch (InternalServerErrorException e) {
-            return ResponseEntity.status(500).body(null); // Errore interno del server
+            return ResponseEntity.status(500).body(null); // Errore interno
         }
     }
+
 
 
     // Modifica di un video esistente (solo admin)
