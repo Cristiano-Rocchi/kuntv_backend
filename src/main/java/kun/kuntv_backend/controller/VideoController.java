@@ -1,6 +1,7 @@
 package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Video;
+import kun.kuntv_backend.payloads.NewVideoDTO;
 import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.services.VideoService;
 import kun.kuntv_backend.exceptions.NotFoundException;
@@ -46,19 +47,11 @@ public class VideoController {
     @PostMapping("/upload")
     @PreAuthorize("hasRole('admin')")
     public ResponseEntity<Video> createVideo(
-            @RequestParam UUID stagioneId,
             @RequestParam("file") MultipartFile file,
-            @RequestParam String titolo,
-            @RequestParam String durata) {
-
+            @RequestBody NewVideoDTO newVideoDTO) {
         try {
-            // Creiamo un oggetto Video usando i parametri forniti
-            Video video = new Video();
-            video.setTitolo(titolo);
-            video.setDurata(durata);
-
             // Chiamiamo il servizio per creare il video
-            Video createdVideo = videoService.createVideo(stagioneId, video, file);
+            Video createdVideo = videoService.createVideo(newVideoDTO, file);
             return ResponseEntity.status(201).body(createdVideo);
         } catch (NotFoundException e) {
             return ResponseEntity.status(400).body(null); // Bad Request se la stagione non esiste
@@ -66,6 +59,7 @@ public class VideoController {
             return ResponseEntity.status(500).body(null); // Errore interno del server
         }
     }
+
 
     // Modifica di un video esistente (solo admin)
     @PutMapping("/{id}")

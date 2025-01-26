@@ -7,6 +7,7 @@ import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
 import kun.kuntv_backend.exceptions.NotFoundException;
+import kun.kuntv_backend.payloads.NewVideoDTO;
 import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.repositories.VideoRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
@@ -55,11 +56,15 @@ public class VideoService {
         return videoRepository.findBySezioneId(sezioneId);
     }
 
-    public Video createVideo(UUID stagioneId, Video video, MultipartFile file) {
-        Stagione stagione = stagioneRepository.findById(stagioneId)
-                .orElseThrow(() -> new NotFoundException("Stagione non trovata con l'ID: " + stagioneId));
+    public Video createVideo(NewVideoDTO dto, MultipartFile file) {
+        Stagione stagione = stagioneRepository.findById(dto.getStagioneId())
+                .orElseThrow(() -> new NotFoundException("Stagione non trovata con l'ID: " + dto.getStagioneId()));
 
         Sezione sezione = stagione.getSezione();
+
+        Video video = new Video();
+        video.setTitolo(dto.getTitolo());
+        video.setDurata(dto.getDurata());
         video.setStagione(stagione);
         video.setSezione(sezione);
 
@@ -84,6 +89,7 @@ public class VideoService {
         throw new InternalServerErrorException("Errore durante il caricamento del video su Cloudinary: " +
                 (lastException != null ? lastException.getMessage() : "Nessun account disponibile"));
     }
+
 
     public Video updateVideo(UUID id, Video updatedVideo) {
         Video existingVideo = videoRepository.findById(id)

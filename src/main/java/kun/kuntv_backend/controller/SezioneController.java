@@ -54,7 +54,7 @@ public class SezioneController {
             );
             return ResponseEntity.status(201).body(createdSezione);
         } catch (InternalServerErrorException e) {
-            return ResponseEntity.status(500).body(null); 
+            return ResponseEntity.status(500).body(null);
         }
     }
 
