@@ -26,7 +26,7 @@ public class Video {
     @Column(nullable = false)
     private String durata;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 1000)
     private String fileLink;
 
     @ManyToOne
