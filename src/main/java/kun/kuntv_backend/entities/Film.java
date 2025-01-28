@@ -18,6 +18,7 @@ public class Film {
     private String Titolo;
     private String Genere;
     private String Durata;
+    @Column(length = 1000)
     private String VideoUrl;
 
     @ManyToOne

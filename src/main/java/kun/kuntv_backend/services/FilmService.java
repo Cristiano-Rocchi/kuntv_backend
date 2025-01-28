@@ -1,7 +1,5 @@
 package kun.kuntv_backend.services;
 
-import com.cloudinary.Cloudinary;
-import com.cloudinary.utils.ObjectUtils;
 import kun.kuntv_backend.entities.Collection;
 import kun.kuntv_backend.entities.Film;
 import kun.kuntv_backend.enums.CollectionType;
@@ -10,10 +8,26 @@ import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.repositories.CollectionRepository;
 import kun.kuntv_backend.repositories.FilmRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+
+
+import java.net.URI;
+import java.time.Duration;
 
 import java.io.*;
+import java.time.Duration;
 import java.util.*;
 import java.util.logging.Logger;
 
@@ -29,9 +43,20 @@ public class FilmService {
     private CollectionRepository collectionRepository;
 
     @Autowired
-    private List<Cloudinary> cloudinaryAccounts;
+    private S3Client s3Client; // Iniettato dal configuratore
+
+    @Value("${backblaze.b2.keyId}")
+    private String keyId;
+
+    @Value("${backblaze.b2.applicationKey}")
+    private String applicationKey;
+
+
+    @Value("${backblaze.b2.bucketName}")
+    private String b2BucketName; // Nome del bucket Backblaze B2
 
     public Film createFilm(Film film, CollectionType tipo, MultipartFile file) {
+        // Trova o crea una nuova collezione per il film
         Collection collection = collectionRepository.findByTipo(tipo)
                 .orElseGet(() -> {
                     Collection newCollection = new Collection();
@@ -43,7 +68,6 @@ public class FilmService {
 
         File tempFile = null;
         File compressedFile = null;
-        List<File> segments = new ArrayList<>();
 
         try {
             // Salva il file ricevuto in un file temporaneo
@@ -54,45 +78,23 @@ public class FilmService {
 
             LOGGER.info("File originale ricevuto: " + tempFile.getAbsolutePath() + " - Dimensione: " + tempFile.length() / 1024 + " KB");
 
-            // 🔹 Comprimi il video con FFmpeg prima di spezzarlo
+            // 🔹 Comprimi il video con FFmpeg prima di caricarlo
             compressedFile = compressVideo(tempFile);
 
-            // 🔹 Spezzare il video in segmenti di max 100MB
-            segments = splitVideo(compressedFile);
+            // 🔹 Caricare il video su Backblaze B2
+            String uploadedUrl = uploadToBackblazeB2(compressedFile);
+            if (uploadedUrl != null) {
+                // Genera il link firmato per il file caricato
+                String presignedUrl = generatePresignedUrl(uploadedUrl);
 
-            // 🔹 Caricare i segmenti su Cloudinary
-            List<String> uploadedUrls = new ArrayList<>();
-            Exception lastException = null;
+                // Imposta l'URL firmato nel film
+                film.setVideoUrl(presignedUrl);
+                LOGGER.info("Video caricato su Backblaze B2 e link firmato generato: " + presignedUrl);
 
-            for (Cloudinary cloudinary : cloudinaryAccounts) {
-                try {
-                    for (File segment : segments) {
-                        Map<String, Object> uploadOptions = ObjectUtils.asMap(
-                                "resource_type", "video",
-                                "chunk_size", 6000000, // 6MB chunk size
-                                "eager_async", true
-                        );
-                        Map<String, Object> uploadResult = cloudinary.uploader().upload(segment, uploadOptions);
-                        String fileLink = (String) uploadResult.get("public_id");
-                        uploadedUrls.add(fileLink);
-                        LOGGER.info("Segmento caricato: " + fileLink);
-                    }
-
-                    // 🔹 Unire i segmenti su Cloudinary
-                    String mergedVideoUrl = concatenateVideos(uploadedUrls, cloudinary);
-                    if (mergedVideoUrl != null) {
-                        film.setVideoUrl(mergedVideoUrl);
-                        LOGGER.info("Video finale unito: " + mergedVideoUrl);
-                        return filmRepository.save(film);
-                    }
-                } catch (IOException e) {
-                    lastException = e;
-                    LOGGER.warning("Errore durante l'upload su Cloudinary: " + e.getMessage());
-                }
+                // Salva il film con il link firmato
+                return filmRepository.save(film);
             }
 
-            throw new InternalServerErrorException("Errore durante il caricamento del film su Cloudinary: " +
-                    (lastException != null ? lastException.getMessage() : "Nessun account disponibile"));
         } catch (Exception e) {
             LOGGER.severe("Errore nella gestione del file: " + e.getMessage());
             throw new InternalServerErrorException("Errore nella gestione del file: " + e.getMessage());
@@ -104,13 +106,54 @@ public class FilmService {
             if (compressedFile != null && compressedFile.exists()) {
                 compressedFile.delete();
             }
-            for (File segment : segments) {
-                if (segment.exists()) {
-                    segment.delete();
-                }
-            }
+        }
+
+        // Aggiungi un return per garantire che venga restituito un oggetto Film
+        return film; // Puoi restituire un film vuoto se necessario
+    }
+
+    // Metodo per generare il link firmato
+    private String generatePresignedUrl(String fileUrl) {
+        try (S3Presigner presigner = S3Presigner.builder()
+                .region(Region.US_EAST_1) // Imposta la regione corretta
+                .endpointOverride(URI.create("https://s3.us-east-005.backblazeb2.com")) // Endpoint di Backblaze
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(keyId, applicationKey)))
+                .build()) {
+
+            // 🔹 Estrai solo il nome del file dall'URL
+            String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
+            LOGGER.info("Generazione URL firmato per il file: " + fileName);
+            LOGGER.info("Bucket: " + b2BucketName);
+
+            // Crea la richiesta per ottenere il file
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(b2BucketName)
+                    .key(fileName) // Passa solo il nome file
+                    .build();
+
+            // Genera il link firmato
+            PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(r ->
+                    r.signatureDuration(Duration.ofHours(1))
+                            .getObjectRequest(getObjectRequest));
+
+            String signedUrl = presignedRequest.url().toString();
+            LOGGER.info("URL firmato generato: " + signedUrl);
+
+            return signedUrl;
+        } catch (Exception e) {
+            LOGGER.severe("Errore nella generazione del link firmato: " + e.getMessage());
+            throw new InternalServerErrorException("Errore nella generazione del link firmato.");
         }
     }
+
+
+
+
+
+
+
+
+
 
     /**
      * 🔹 Metodo per comprimere il video con FFmpeg
@@ -138,69 +181,29 @@ public class FilmService {
 
         if (exitCode != 0 || !compressedFile.exists() || compressedFile.length() == 0) {
             LOGGER.warning("Compressione fallita (Exit Code: " + exitCode + "). Si userà il file originale.");
-            return inputFile;
+            return inputFile; // Se la compressione fallisce, restituisci il file originale
         } else {
             LOGGER.info("Compressione completata: " + compressedFile.getAbsolutePath() +
                     " - Dimensione: " + compressedFile.length() / 1024 + " KB - Tempo impiegato: " + (endTime - startTime) + " ms");
-            return compressedFile;
+            return compressedFile; // Restituisci il file compresso
         }
     }
 
     /**
-     * 🔹 Metodo per dividere un video in segmenti da 100MB
+     * 🔹 Metodo per caricare un file su Backblaze B2
      */
-    private List<File> splitVideo(File inputFile) throws IOException, InterruptedException {
-        List<File> chunks = new ArrayList<>();
-        String outputPattern = inputFile.getParent() + File.separator + "segment_%03d.mp4";
+    private String uploadToBackblazeB2(File file) throws IOException {
+        // Usa direttamente il client S3 iniettato
+        PutObjectRequest uploadRequest = PutObjectRequest.builder()
+                .bucket(b2BucketName) // Usa il nome del bucket
+                .key(file.getName()) // Nome del file nel bucket
+                .build();
 
-        String command = String.format("C:\\ffmpeg-7.1-full_build\\bin\\ffmpeg.exe -i \"%s\" -c copy -map 0 -segment_time 00:04:30 -f segment -reset_timestamps 1 \"%s\"",
-                inputFile.getAbsolutePath(), outputPattern);
+        // Carica il file
+        PutObjectResponse response = s3Client.putObject(uploadRequest, RequestBody.fromFile(file));
 
-        Process process = Runtime.getRuntime().exec(command);
-        process.waitFor();
-
-        // Recupera i segmenti generati
-        File folder = inputFile.getParentFile();
-        for (File file : folder.listFiles()) {
-            if (file.getName().startsWith("segment_") && file.getName().endsWith(".mp4") && file.length() < 100 * 1024 * 1024) {
-                chunks.add(file);
-            }
-        }
-        return chunks;
-    }
-
-    /**
-     * 🔹 Metodo per unire i segmenti su Cloudinary
-     */
-    private String concatenateVideos(List<String> publicIds, Cloudinary cloudinary) {
-        try {
-            Map<String, Object> concatOptions = ObjectUtils.asMap(
-                    "resource_type", "video",
-                    "public_id", "merged_video_" + UUID.randomUUID(),
-                    "eager_async", true,
-                    "transformation", ObjectUtils.asMap(
-                            "fetch_format", "mp4",
-                            "quality", "auto"
-                    ),
-                    "manifest_transformation", ObjectUtils.asMap(
-                            "format", "mp4"
-                    )
-            );
-
-            StringBuilder transformationString = new StringBuilder();
-            for (String id : publicIds) {
-                transformationString.append(id).append("/");
-            }
-
-            concatOptions.put("manifest", transformationString.toString());
-
-            Map<String, Object> result = cloudinary.uploader().upload(null, concatOptions);
-            return (String) result.get("secure_url");
-
-        } catch (Exception e) {
-            LOGGER.warning("Errore durante la concatenazione su Cloudinary: " + e.getMessage());
-            return null;
-        }
+        // Restituisci l'URL pubblico del file caricato
+        return s3Client.utilities().getUrl(builder -> builder.bucket(b2BucketName).key(file.getName())).toString();
     }
 
     public Optional<Film> getFilmById(Long id) {

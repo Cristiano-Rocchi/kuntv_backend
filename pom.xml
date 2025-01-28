@@ -101,6 +101,26 @@
 			<version>0.12.6</version>
 		</dependency>
 
+		<!-- dipendenze backblaze -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>2.20.20</version> <!-- Assicurati di usare l'ultima versione -->
+		</dependency>
+
+		<!-- Log4j (opzionale per il logging se lo desideri) -->
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-api</artifactId>
+			<version>2.19.0</version>
+		</dependency>
+
+		<!-- Apache HTTP Client per AWS SDK -->
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>4.5.13</version> <!-- Puoi usare la versione più recente se necessario -->
+		</dependency>
 
 	</dependencies>
 
