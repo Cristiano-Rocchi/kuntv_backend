@@ -10,21 +10,31 @@ import software.amazon.awssdk.services.s3.S3Client;
 
 import java.net.URI;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Configuration
 public class BackblazeB2Config {
 
-    @Bean
-    public Map<String, S3Client> backblazeAccounts(
-            @Value("${backblaze.b2.keyId.1}") String keyId1,
-            @Value("${backblaze.b2.applicationKey.1}") String applicationKey1,
-            @Value("${backblaze.b2.bucketName.1}") String bucketName1,
-            @Value("${backblaze.b2.keyId.2}") String keyId2,
-            @Value("${backblaze.b2.applicationKey.2}") String applicationKey2,
-            @Value("${backblaze.b2.bucketName.2}") String bucketName2) {
+    @Value("${backblaze.b2.bucketName.1}")
+    private String bucketName1;
 
+    @Value("${backblaze.b2.keyId.1}")
+    private String keyId1;
+
+    @Value("${backblaze.b2.applicationKey.1}")
+    private String applicationKey1;
+
+    @Value("${backblaze.b2.bucketName.2}")
+    private String bucketName2;
+
+    @Value("${backblaze.b2.keyId.2}")
+    private String keyId2;
+
+    @Value("${backblaze.b2.applicationKey.2}")
+    private String applicationKey2;
+
+    @Bean
+    public Map<String, S3Client> backblazeAccounts() {
         Map<String, S3Client> accounts = new HashMap<>();
 
         accounts.put(bucketName1, createS3Client(keyId1, applicationKey1));
@@ -42,11 +52,7 @@ public class BackblazeB2Config {
     }
 
     @Bean
-    public Map<String, String> keyIdMapping(
-            @Value("${backblaze.b2.bucketName.1}") String bucketName1,
-            @Value("${backblaze.b2.keyId.1}") String keyId1,
-            @Value("${backblaze.b2.bucketName.2}") String bucketName2,
-            @Value("${backblaze.b2.keyId.2}") String keyId2) {
+    public Map<String, String> keyIdMapping() {
         Map<String, String> map = new HashMap<>();
         map.put(bucketName1, keyId1);
         map.put(bucketName2, keyId2);
@@ -54,11 +60,7 @@ public class BackblazeB2Config {
     }
 
     @Bean
-    public Map<String, String> applicationKeyMapping(
-            @Value("${backblaze.b2.bucketName.1}") String bucketName1,
-            @Value("${backblaze.b2.applicationKey.1}") String applicationKey1,
-            @Value("${backblaze.b2.bucketName.2}") String bucketName2,
-            @Value("${backblaze.b2.applicationKey.2}") String applicationKey2) {
+    public Map<String, String> applicationKeyMapping() {
         Map<String, String> map = new HashMap<>();
         map.put(bucketName1, applicationKey1);
         map.put(bucketName2, applicationKey2);

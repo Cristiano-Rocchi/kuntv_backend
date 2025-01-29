@@ -51,16 +51,24 @@ public class VideoService {
     @Autowired
     private Map<String, String> keyIdMapping;
     public List<VideoRespDTO> getAllVideos() {
-        List<Video> videos = videoRepository.findAll();
-
-        return videos.stream()
+        return videoRepository.findAll().stream()
                 .map(video -> {
-                    LOGGER.info("🔹 Recupero video ID: " + video.getId());
+                    // 🔹 Ottieni il bucket basato sulla sezione
+                    String bucketName = determineBucket(video.getSezione().getTitolo());
+
+                    // 🔹 Ottieni le credenziali per il bucket selezionato
+                    String keyId = backblazeB2Config.keyIdMapping().get(bucketName);
+                    String applicationKey = backblazeB2Config.applicationKeyMapping().get(bucketName);
+
+                    if (keyId == null || applicationKey == null) {
+                        throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + bucketName);
+                    }
+
                     return new VideoRespDTO(
                             video.getId(),
                             video.getTitolo(),
                             video.getDurata(),
-                            generatePresignedUrl(video.getFileLink()),
+                            generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey),
                             video.getStagione() != null ? video.getStagione().getTitolo() : null,
                             video.getSezione().getTitolo()
                     );
@@ -68,13 +76,28 @@ public class VideoService {
                 .collect(Collectors.toList());
     }
 
+
+
     public Video getVideoById(UUID id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("ID del video non valido: " + id));
 
-        video.setFileLink(generatePresignedUrl(video.getFileLink()));
+        // 🔹 Ottieni il bucket basato sulla sezione
+        String bucketName = determineBucket(video.getSezione().getTitolo());
+
+        // 🔹 Ottieni le credenziali per il bucket selezionato
+        String keyId = backblazeB2Config.keyIdMapping().get(bucketName);
+        String applicationKey = backblazeB2Config.applicationKeyMapping().get(bucketName);
+
+        if (keyId == null || applicationKey == null) {
+            throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + bucketName);
+        }
+
+        video.setFileLink(generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey));
         return video;
     }
+
+
 
     public Video updateVideo(UUID id, Video updatedVideo) {
         Video existingVideo = videoRepository.findById(id)
@@ -127,8 +150,8 @@ public class VideoService {
 
         Sezione sezione = stagione.getSezione();
 
-        // 📦 🔍 Determina il bucket corretto
-        String bucketName = determineBucket();
+        // 📦 🔍 Determina il bucket corretto passando il nome della sezione
+        String bucketName = determineBucket(sezione.getTitolo());
         LOGGER.info("📦 Bucket selezionato per il video: " + bucketName);
 
         // 🔍 Recupera il client S3 associato al bucket
@@ -173,25 +196,24 @@ public class VideoService {
     }
 
 
+
     /**
      * 🔹 Determina il bucket corretto da usare
      */
-    private String determineBucket() {
+    private String determineBucket(String sezioneNome) {
         List<String> buckets = new ArrayList<>(keyIdMapping.keySet());
 
         if (buckets.isEmpty()) {
             throw new InternalServerErrorException("❌ Nessun bucket disponibile per l'upload!");
         }
 
-        // 🔹 Controlla quale bucket ha spazio disponibile
-        for (String bucket : buckets) {
-            if (hasAvailableSpace(bucket)) {
-                LOGGER.info("✅ Bucket assegnato: " + bucket);
-                return bucket;
-            }
-        }
+        // 🔹 Alterna i bucket in modo bilanciato (round-robin)
+        int index = (int) (System.currentTimeMillis() % buckets.size());
 
-        throw new InternalServerErrorException("❌ Nessun bucket ha spazio disponibile!");
+        String selectedBucket = buckets.get(index);
+        LOGGER.info("✅ Bucket assegnato: " + selectedBucket);
+
+        return selectedBucket;
     }
 
     /**
@@ -208,6 +230,40 @@ public class VideoService {
         } catch (Exception e) {
             LOGGER.warning("⚠ Il bucket " + bucketName + " non è disponibile.");
             return false;
+        }
+    }
+
+
+    private String generatePresignedUrl(String fileUrl, String bucketName, String keyId, String applicationKey) {
+        try (S3Presigner presigner = S3Presigner.builder()
+                .region(Region.US_EAST_1)
+                .endpointOverride(URI.create("https://s3.us-east-005.backblazeb2.com"))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(keyId, applicationKey)))
+                .build()) {
+
+            // 🔹 Estrai solo il nome del file dall'URL
+            String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
+            LOGGER.info("🔹 Generazione URL firmato per il file: " + fileName);
+            LOGGER.info("🔹 Bucket: " + bucketName);
+
+            // Crea la richiesta per ottenere il file
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(fileName)
+                    .build();
+
+            // Genera il link firmato
+            PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(r ->
+                    r.signatureDuration(Duration.ofHours(1))
+                            .getObjectRequest(getObjectRequest));
+
+            String signedUrl = presignedRequest.url().toString();
+            LOGGER.info("✅ URL firmato generato: " + signedUrl);
+
+            return signedUrl;
+        } catch (Exception e) {
+            LOGGER.severe("❌ Errore nella generazione del link firmato: " + e.getMessage());
+            throw new InternalServerErrorException("Errore nella generazione del link firmato.");
         }
     }
 
@@ -234,9 +290,7 @@ public class VideoService {
         return fileUrl;
     }
 
-    private String generatePresignedUrl(String fileUrl) {
-        return fileUrl; // Gestione pre-signed URL da implementare se necessario
-    }
+
 
     private File compressVideo(File inputFile) throws IOException, InterruptedException {
         File compressedFile = new File(inputFile.getParent(), "compressed_" + inputFile.getName());
