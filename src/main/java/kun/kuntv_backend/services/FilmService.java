@@ -8,25 +8,18 @@ import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.repositories.CollectionRepository;
 import kun.kuntv_backend.repositories.FilmRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
-
-import java.net.URI;
-import java.time.Duration;
-
 import java.io.*;
+import java.net.URI;
 import java.time.Duration;
 import java.util.*;
 import java.util.logging.Logger;
@@ -43,17 +36,7 @@ public class FilmService {
     private CollectionRepository collectionRepository;
 
     @Autowired
-    private S3Client s3Client; // Iniettato dal configuratore
-
-    @Value("${backblaze.b2.keyId}")
-    private String keyId;
-
-    @Value("${backblaze.b2.applicationKey}")
-    private String applicationKey;
-
-
-    @Value("${backblaze.b2.bucketName}")
-    private String b2BucketName; // Nome del bucket Backblaze B2
+    private Map<String, S3Client> backblazeAccounts; // Multiaccount
 
     public Film createFilm(Film film, CollectionType tipo, MultipartFile file) {
         // Trova o crea una nuova collezione per il film
@@ -65,6 +48,13 @@ public class FilmService {
                 });
 
         film.setCollection(collection);
+        String bucketName = collection.getTipo().name().toLowerCase(); // Usa il tipo di collezione come bucketName
+
+        // Ottieni il client S3 associato al bucket
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) {
+            throw new InternalServerErrorException("❌ Nessun account Backblaze trovato per il bucket: " + bucketName);
+        }
 
         File tempFile = null;
         File compressedFile = null;
@@ -76,84 +66,79 @@ public class FilmService {
                 fos.write(file.getBytes());
             }
 
-            LOGGER.info("File originale ricevuto: " + tempFile.getAbsolutePath() + " - Dimensione: " + tempFile.length() / 1024 + " KB");
+            LOGGER.info("📁 File originale ricevuto: " + tempFile.getAbsolutePath());
 
             // 🔹 Comprimi il video con FFmpeg prima di caricarlo
             compressedFile = compressVideo(tempFile);
 
-            // 🔹 Caricare il video su Backblaze B2
-            String uploadedUrl = uploadToBackblazeB2(compressedFile);
-            if (uploadedUrl != null) {
-                // Genera il link firmato per il file caricato
-                String presignedUrl = generatePresignedUrl(uploadedUrl);
+            // 🔹 Carica il video su Backblaze B2
+            String uploadedUrl = uploadToBackblazeB2(s3Client, bucketName, compressedFile);
 
-                // Imposta l'URL firmato nel film
-                film.setVideoUrl(presignedUrl);
-                LOGGER.info("Video caricato su Backblaze B2 e link firmato generato: " + presignedUrl);
+            // 🔹 Genera il link firmato
+            String presignedUrl = generatePresignedUrl(s3Client, bucketName, uploadedUrl);
 
-                // Salva il film con il link firmato
-                return filmRepository.save(film);
-            }
+            // 🔹 Imposta l'URL firmato nel film
+            film.setVideoUrl(presignedUrl);
+            LOGGER.info("✅ Video caricato su Backblaze B2 e link firmato generato: " + presignedUrl);
+
+            // Salva il film con il link firmato
+            return filmRepository.save(film);
 
         } catch (Exception e) {
-            LOGGER.severe("Errore nella gestione del file: " + e.getMessage());
-            throw new InternalServerErrorException("Errore nella gestione del file: " + e.getMessage());
+            throw new InternalServerErrorException("❌ Errore nella gestione del file: " + e.getMessage());
         } finally {
-            // Pulizia dei file temporanei
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-            }
-            if (compressedFile != null && compressedFile.exists()) {
-                compressedFile.delete();
-            }
+            if (tempFile != null) tempFile.delete();
+            if (compressedFile != null) compressedFile.delete();
         }
-
-        // Aggiungi un return per garantire che venga restituito un oggetto Film
-        return film; // Puoi restituire un film vuoto se necessario
     }
 
-    // Metodo per generare il link firmato
-    private String generatePresignedUrl(String fileUrl) {
+    /**
+     * 🔹 Metodo per generare il link firmato
+     */
+    private String generatePresignedUrl(S3Client s3Client, String bucketName, String fileUrl) {
         try (S3Presigner presigner = S3Presigner.builder()
-                .region(Region.US_EAST_1) // Imposta la regione corretta
-                .endpointOverride(URI.create("https://s3.us-east-005.backblazeb2.com")) // Endpoint di Backblaze
-                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(keyId, applicationKey)))
+                .endpointOverride(URI.create("https://s3.us-east-005.backblazeb2.com"))
                 .build()) {
 
             // 🔹 Estrai solo il nome del file dall'URL
             String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
-            LOGGER.info("Generazione URL firmato per il file: " + fileName);
-            LOGGER.info("Bucket: " + b2BucketName);
 
-            // Crea la richiesta per ottenere il file
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                    .bucket(b2BucketName)
-                    .key(fileName) // Passa solo il nome file
+                    .bucket(bucketName)
+                    .key(fileName)
                     .build();
 
-            // Genera il link firmato
             PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(r ->
                     r.signatureDuration(Duration.ofHours(1))
                             .getObjectRequest(getObjectRequest));
 
             String signedUrl = presignedRequest.url().toString();
-            LOGGER.info("URL firmato generato: " + signedUrl);
-
+            LOGGER.info("✅ URL firmato generato: " + signedUrl);
             return signedUrl;
         } catch (Exception e) {
-            LOGGER.severe("Errore nella generazione del link firmato: " + e.getMessage());
-            throw new InternalServerErrorException("Errore nella generazione del link firmato.");
+            throw new InternalServerErrorException("❌ Errore nella generazione del link firmato: " + e.getMessage());
         }
     }
 
+    /**
+     * 🔹 Metodo per caricare un file su Backblaze B2
+     */
+    private String uploadToBackblazeB2(S3Client s3Client, String bucketName, File file) throws IOException {
+        LOGGER.info("🚀 Inizio caricamento file: " + file.getName() + " su Backblaze B2 (Bucket: " + bucketName + ")...");
 
+        PutObjectRequest uploadRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(file.getName())
+                .build();
 
+        s3Client.putObject(uploadRequest, RequestBody.fromFile(file));
 
+        String fileUrl = s3Client.utilities().getUrl(builder -> builder.bucket(bucketName).key(file.getName())).toString();
 
+        LOGGER.info("✅ Upload completato con successo! URL: " + fileUrl);
 
-
-
-
+        return fileUrl;
+    }
 
     /**
      * 🔹 Metodo per comprimere il video con FFmpeg
@@ -168,7 +153,6 @@ public class FilmService {
         long startTime = System.currentTimeMillis();
         Process process = Runtime.getRuntime().exec(command);
 
-        // Leggere l'output di FFmpeg per evitare blocchi
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -180,30 +164,12 @@ public class FilmService {
         long endTime = System.currentTimeMillis();
 
         if (exitCode != 0 || !compressedFile.exists() || compressedFile.length() == 0) {
-            LOGGER.warning("Compressione fallita (Exit Code: " + exitCode + "). Si userà il file originale.");
-            return inputFile; // Se la compressione fallisce, restituisci il file originale
+            LOGGER.warning("⚠ Compressione fallita, uso file originale.");
+            return inputFile;
         } else {
-            LOGGER.info("Compressione completata: " + compressedFile.getAbsolutePath() +
-                    " - Dimensione: " + compressedFile.length() / 1024 + " KB - Tempo impiegato: " + (endTime - startTime) + " ms");
-            return compressedFile; // Restituisci il file compresso
+            LOGGER.info("✅ Compressione completata in " + (endTime - startTime) + " ms");
+            return compressedFile;
         }
-    }
-
-    /**
-     * 🔹 Metodo per caricare un file su Backblaze B2
-     */
-    private String uploadToBackblazeB2(File file) throws IOException {
-        // Usa direttamente il client S3 iniettato
-        PutObjectRequest uploadRequest = PutObjectRequest.builder()
-                .bucket(b2BucketName) // Usa il nome del bucket
-                .key(file.getName()) // Nome del file nel bucket
-                .build();
-
-        // Carica il file
-        PutObjectResponse response = s3Client.putObject(uploadRequest, RequestBody.fromFile(file));
-
-        // Restituisci l'URL pubblico del file caricato
-        return s3Client.utilities().getUrl(builder -> builder.bucket(b2BucketName).key(file.getName())).toString();
     }
 
     public Optional<Film> getFilmById(Long id) {

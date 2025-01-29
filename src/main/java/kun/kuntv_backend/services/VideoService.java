@@ -1,6 +1,6 @@
 package kun.kuntv_backend.services;
 
-import kun.kuntv_backend.entities.Film;
+import kun.kuntv_backend.config.BackblazeB2Config;
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Sezione;
@@ -11,7 +11,6 @@ import kun.kuntv_backend.payloads.VideoRespDTO;
 import kun.kuntv_backend.repositories.VideoRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -22,7 +21,6 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
@@ -36,7 +34,7 @@ import java.util.stream.Collectors;
 @Service
 public class VideoService {
 
-    private static final Logger LOGGER = Logger.getLogger(VideoService.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(kun.kuntv_backend.services.VideoService.class.getName());
 
     @Autowired
     private VideoRepository videoRepository;
@@ -45,28 +43,24 @@ public class VideoService {
     private StagioneRepository stagioneRepository;
 
     @Autowired
-    private S3Client s3Client; // Iniettato dal configuratore
+    private BackblazeB2Config backblazeB2Config;
 
-    @Value("${backblaze.b2.keyId}")
-    private String keyId;
+    @Autowired
+    private Map<String, S3Client> backblazeAccounts;
 
-    @Value("${backblaze.b2.applicationKey}")
-    private String applicationKey;
-
-    @Value("${backblaze.b2.bucketName}")
-    private String b2BucketName; // Nome del bucket Backblaze B2
-
+    @Autowired
+    private Map<String, String> keyIdMapping;
     public List<VideoRespDTO> getAllVideos() {
         List<Video> videos = videoRepository.findAll();
 
         return videos.stream()
                 .map(video -> {
-                    LOGGER.info("🔹 Generazione link firmato per video ID: " + video.getId() + " - URL salvato: " + video.getFileLink());
+                    LOGGER.info("🔹 Recupero video ID: " + video.getId());
                     return new VideoRespDTO(
                             video.getId(),
                             video.getTitolo(),
                             video.getDurata(),
-                            generatePresignedUrl(video.getFileLink()), // Genera URL firmato
+                            generatePresignedUrl(video.getFileLink()),
                             video.getStagione() != null ? video.getStagione().getTitolo() : null,
                             video.getSezione().getTitolo()
                     );
@@ -78,12 +72,9 @@ public class VideoService {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("ID del video non valido: " + id));
 
-        LOGGER.info("🔹 Generazione link firmato per video ID: " + video.getId() + " - URL salvato: " + video.getFileLink());
         video.setFileLink(generatePresignedUrl(video.getFileLink()));
-
         return video;
     }
-
 
     public Video updateVideo(UUID id, Video updatedVideo) {
         Video existingVideo = videoRepository.findById(id)
@@ -96,11 +87,7 @@ public class VideoService {
             existingVideo.setDurata(updatedVideo.getDurata());
         }
 
-        try {
-            return videoRepository.save(existingVideo);
-        } catch (Exception e) {
-            throw new InternalServerErrorException("Errore durante l'aggiornamento del video.");
-        }
+        return videoRepository.save(existingVideo);
     }
 
     public boolean deleteVideo(UUID id) {
@@ -108,31 +95,47 @@ public class VideoService {
                 .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
 
         try {
-            // Cancella il file su Backblaze B2
+            // Estrai il nome del file e il bucket associato
             String fileName = video.getFileLink().substring(video.getFileLink().lastIndexOf("/") + 1);
+            String bucketName = video.getSezione().getTitolo();
 
+            // Recupera il client S3 associato al bucket
+            S3Client s3Client = backblazeAccounts.get(bucketName);
+            if (s3Client == null) {
+                throw new InternalServerErrorException("❌ Nessun account Backblaze trovato per il bucket: " + bucketName);
+            }
+
+            // Esegui la cancellazione dal bucket
             DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                    .bucket(b2BucketName)
+                    .bucket(bucketName)
                     .key(fileName)
                     .build();
             s3Client.deleteObject(deleteObjectRequest);
 
-            LOGGER.info("File cancellato da Backblaze B2: " + fileName);
+            LOGGER.info("✅ File eliminato con successo da Backblaze B2: " + fileName);
 
             videoRepository.delete(video);
             return true;
         } catch (Exception e) {
-            throw new InternalServerErrorException("Errore durante la cancellazione del video.");
+            throw new InternalServerErrorException("❌ Errore durante la cancellazione del video: " + e.getMessage());
         }
     }
-
-
 
     public Video createVideo(NewVideoDTO dto, MultipartFile file) {
         Stagione stagione = stagioneRepository.findById(dto.getStagioneId())
                 .orElseThrow(() -> new NotFoundException("Stagione non trovata con l'ID: " + dto.getStagioneId()));
 
         Sezione sezione = stagione.getSezione();
+
+        // 📦 🔍 Determina il bucket corretto
+        String bucketName = determineBucket();
+        LOGGER.info("📦 Bucket selezionato per il video: " + bucketName);
+
+        // 🔍 Recupera il client S3 associato al bucket
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) {
+            throw new InternalServerErrorException("❌ Nessun client S3 trovato per il bucket: " + bucketName);
+        }
 
         Video video = new Video();
         video.setTitolo(dto.getTitolo());
@@ -149,48 +152,104 @@ public class VideoService {
                 fos.write(file.getBytes());
             }
 
-            LOGGER.info("File originale ricevuto: " + tempFile.getAbsolutePath() + " - Dimensione: " + tempFile.length() / 1024 + " KB");
+            LOGGER.info("📁 File originale ricevuto: " + tempFile.getAbsolutePath());
 
             // 🔹 Comprimi il video con FFmpeg prima di caricarlo
             compressedFile = compressVideo(tempFile);
 
-            // 🔹 Caricare il video su Backblaze B2
-            String uploadedUrl = uploadToBackblazeB2(compressedFile);
-            if (uploadedUrl != null) {
-                LOGGER.info("🔹 Video caricato su Backblaze B2 con successo: " + uploadedUrl);
+            LOGGER.info("🚀 Inizio caricamento su Backblaze B2...");
+            String uploadedUrl = uploadToBackblazeB2(s3Client, bucketName, compressedFile);
+            LOGGER.info("✅ Caricamento completato, URL: " + uploadedUrl);
 
-                // 🔹 Genera il link firmato
-                String presignedUrl = generatePresignedUrl(uploadedUrl);
-                LOGGER.info("✅ URL firmato generato con successo: " + presignedUrl);
-
-                // 🔹 Imposta l'URL firmato nel video
-                video.setFileLink(presignedUrl);
-
-                return videoRepository.save(video);
-            }
-
+            video.setFileLink(uploadedUrl);
+            return videoRepository.save(video);
         } catch (Exception e) {
-            LOGGER.severe("❌ Errore nella gestione del file: " + e.getMessage());
+            LOGGER.severe("❌ Errore durante la creazione del video: " + e.getMessage());
             throw new InternalServerErrorException("Errore nella gestione del file: " + e.getMessage());
         } finally {
             if (tempFile != null) tempFile.delete();
             if (compressedFile != null) compressedFile.delete();
         }
+    }
 
-        return video;
+
+    /**
+     * 🔹 Determina il bucket corretto da usare
+     */
+    private String determineBucket() {
+        List<String> buckets = new ArrayList<>(keyIdMapping.keySet());
+
+        if (buckets.isEmpty()) {
+            throw new InternalServerErrorException("❌ Nessun bucket disponibile per l'upload!");
+        }
+
+        // 🔹 Controlla quale bucket ha spazio disponibile
+        for (String bucket : buckets) {
+            if (hasAvailableSpace(bucket)) {
+                LOGGER.info("✅ Bucket assegnato: " + bucket);
+                return bucket;
+            }
+        }
+
+        throw new InternalServerErrorException("❌ Nessun bucket ha spazio disponibile!");
+    }
+
+    /**
+     * 🔹 Verifica se un bucket ha spazio disponibile
+     */
+    private boolean hasAvailableSpace(String bucketName) {
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) return false;
+
+        try {
+            // Esegue una richiesta HeadBucket per verificare se il bucket risponde
+            s3Client.headBucket(builder -> builder.bucket(bucketName));
+            return true; // Se la richiesta ha successo, il bucket è disponibile
+        } catch (Exception e) {
+            LOGGER.warning("⚠ Il bucket " + bucketName + " non è disponibile.");
+            return false;
+        }
+    }
+
+
+
+
+
+
+
+    private String uploadToBackblazeB2(S3Client s3Client, String bucketName, File file) throws IOException {
+        LOGGER.info("🚀 Inizio caricamento file: " + file.getName() + " su Backblaze B2 (Bucket: " + bucketName + ")...");
+
+        PutObjectRequest uploadRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(file.getName())
+                .build();
+
+        s3Client.putObject(uploadRequest, RequestBody.fromFile(file));
+
+        String fileUrl = s3Client.utilities().getUrl(builder -> builder.bucket(bucketName).key(file.getName())).toString();
+
+        LOGGER.info("✅ Upload completato con successo! URL: " + fileUrl);
+
+        return fileUrl;
+    }
+
+    private String generatePresignedUrl(String fileUrl) {
+        return fileUrl; // Gestione pre-signed URL da implementare se necessario
     }
 
     private File compressVideo(File inputFile) throws IOException, InterruptedException {
         File compressedFile = new File(inputFile.getParent(), "compressed_" + inputFile.getName());
 
-        String command = String.format("C:\\ffmpeg-7.1-full_build\\bin\\ffmpeg.exe -i \"%s\" -vcodec libx265 -crf 24 \"%s\"",
+        LOGGER.info("🔄 Inizio compressione video con FFmpeg: " + inputFile.getAbsolutePath());
+
+        String command = String.format("ffmpeg -i \"%s\" -vcodec libx265 -crf 24 \"%s\"",
                 inputFile.getAbsolutePath(),
                 compressedFile.getAbsolutePath());
 
-        long startTime = System.currentTimeMillis();
         Process process = Runtime.getRuntime().exec(command);
 
-        // Leggere l'output di FFmpeg per evitare blocchi
+        // Leggi l'output di FFmpeg in tempo reale
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -199,73 +258,14 @@ public class VideoService {
         }
 
         int exitCode = process.waitFor();
-        long endTime = System.currentTimeMillis();
-
-        if (exitCode != 0 || !compressedFile.exists() || compressedFile.length() == 0) {
-            LOGGER.warning("Compressione fallita (Exit Code: " + exitCode + "). Si userà il file originale.");
-            return inputFile; // Se la compressione fallisce, restituisci il file originale
-        } else {
-            LOGGER.info("Compressione completata: " + compressedFile.getAbsolutePath() +
-                    " - Dimensione: " + compressedFile.length() / 1024 + " KB - Tempo impiegato: " + (endTime - startTime) + " ms");
-            return compressedFile; // Restituisci il file compresso
+        if (exitCode != 0) {
+            LOGGER.warning("⚠ Compressione fallita con codice di uscita: " + exitCode);
+            return inputFile; // Se fallisce, carica il file originale
         }
+
+        LOGGER.info("✅ Compressione completata: " + compressedFile.getAbsolutePath());
+
+        return compressedFile;
     }
-
-    private String uploadToBackblazeB2(File file) throws IOException {
-        PutObjectRequest uploadRequest = PutObjectRequest.builder()
-                .bucket(b2BucketName)
-                .key(file.getName())
-                .build();
-
-        PutObjectResponse response = s3Client.putObject(uploadRequest, RequestBody.fromFile(file));
-
-        return s3Client.utilities().getUrl(builder -> builder.bucket(b2BucketName).key(file.getName())).toString();
-    }
-
-    private String generatePresignedUrl(String fileUrl) {
-        LOGGER.info("🔹 Entrato in generatePresignedUrl per: " + fileUrl);
-
-        try (S3Presigner presigner = S3Presigner.builder()
-                .region(Region.US_EAST_1)
-                .endpointOverride(URI.create("https://s3.us-east-005.backblazeb2.com"))
-                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(keyId, applicationKey)))
-                .build()) {
-
-            LOGGER.info("🔹 Configurato S3Presigner con successo!");
-
-            // ✅ Estrai solo il nome del file, rimuovendo l'URL completo
-            String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
-            LOGGER.info("🔹 Nome del file estratto: " + fileName);
-
-            // 🔹 LOG: Stampa il bucket
-            LOGGER.info("🔹 Nome del bucket utilizzato: " + b2BucketName);
-
-            // 🔹 Creazione della richiesta
-            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                    .bucket(b2BucketName)
-                    .key(fileName)
-                    .build();
-
-            LOGGER.info("🔹 Creata richiesta per il file: " + fileName);
-
-            // 🔹 Generazione del link firmato
-            PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(r ->
-                    r.signatureDuration(Duration.ofHours(1))
-                            .getObjectRequest(getObjectRequest));
-
-            String signedUrl = presignedRequest.url().toString();
-            LOGGER.info("✅ URL firmato generato con successo: " + signedUrl);
-
-            return signedUrl;
-        } catch (Exception e) {
-            LOGGER.severe("❌ Errore nella generazione del link firmato: " + e.getMessage());
-            throw new InternalServerErrorException("Errore nella generazione del link firmato.");
-        }
-    }
-
-
-
-
-
 
 }
