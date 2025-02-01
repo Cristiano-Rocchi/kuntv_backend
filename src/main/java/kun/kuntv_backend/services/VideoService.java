@@ -18,9 +18,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
@@ -50,13 +48,14 @@ public class VideoService {
 
     @Autowired
     private Map<String, String> keyIdMapping;
+
     public List<VideoRespDTO> getAllVideos() {
         return videoRepository.findAll().stream()
                 .map(video -> {
-                    // 🔹 Ottieni il bucket basato sulla sezione
-                    String bucketName = determineBucket(video.getSezione().getTitolo());
+                    // 🔹 Estrai il bucket dal fileLink
+                    String bucketName = extractBucketNameFromUrl(video.getFileLink());
 
-                    // 🔹 Ottieni le credenziali per il bucket selezionato
+                    // 🔹 Ottieni le credenziali per il bucket corretto
                     String keyId = backblazeB2Config.keyIdMapping().get(bucketName);
                     String applicationKey = backblazeB2Config.applicationKeyMapping().get(bucketName);
 
@@ -76,16 +75,14 @@ public class VideoService {
                 .collect(Collectors.toList());
     }
 
-
-
     public Video getVideoById(UUID id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("ID del video non valido: " + id));
 
-        // 🔹 Ottieni il bucket basato sulla sezione
-        String bucketName = determineBucket(video.getSezione().getTitolo());
+        // 🔹 Estrai il bucket dal fileLink
+        String bucketName = extractBucketNameFromUrl(video.getFileLink());
 
-        // 🔹 Ottieni le credenziali per il bucket selezionato
+        // 🔹 Ottieni le credenziali per il bucket corretto
         String keyId = backblazeB2Config.keyIdMapping().get(bucketName);
         String applicationKey = backblazeB2Config.applicationKeyMapping().get(bucketName);
 
@@ -93,9 +90,32 @@ public class VideoService {
             throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + bucketName);
         }
 
+        // 🔹 Genera il link firmato e aggiorna il fileLink del video
         video.setFileLink(generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey));
         return video;
     }
+
+
+    private String extractBucketNameFromUrl(String fileUrl) {
+        try {
+            URI uri = new URI(fileUrl);
+            String host = uri.getHost(); // Es. "kun-tv2.s3.us-east-005.backblazeb2.com"
+
+            if (host == null || !host.contains(".")) {
+                throw new InternalServerErrorException("❌ URL non valido: " + fileUrl);
+            }
+
+            // 🔹 Il bucket è la prima parte del dominio (es. "kun-tv2" da "kun-tv2.s3.us-east-005.backblazeb2.com")
+            String bucketName = host.split("\\.")[0];
+
+            LOGGER.info("🔹 Bucket estratto dall'URL: " + bucketName);
+            return bucketName;
+        } catch (Exception e) {
+            throw new InternalServerErrorException("❌ Errore nell'estrazione del bucket dall'URL: " + fileUrl + " - " + e.getMessage());
+        }
+    }
+
+
 
 
 
@@ -149,18 +169,6 @@ public class VideoService {
                 .orElseThrow(() -> new NotFoundException("Stagione non trovata con l'ID: " + dto.getStagioneId()));
 
         Sezione sezione = stagione.getSezione();
-        String bucketName = determineBucket(sezione.getTitolo());
-
-        S3Client s3Client = backblazeAccounts.get(bucketName);
-        if (s3Client == null) {
-            throw new InternalServerErrorException("❌ Nessun client S3 trovato per il bucket: " + bucketName);
-        }
-
-        Video video = new Video();
-        video.setTitolo(dto.getTitolo());
-        video.setDurata(dto.getDurata());
-        video.setStagione(stagione);
-        video.setSezione(sezione);
 
         File tempFile = null;
         File compressedFile = null;
@@ -171,10 +179,30 @@ public class VideoService {
                 fos.write(file.getBytes());
             }
 
+            // 🔹 Comprimi il video prima di determinare il bucket
             compressedFile = compressVideo(tempFile);
-            String uploadedUrl = uploadToBackblazeB2(s3Client, bucketName, compressedFile);
+            long fileSize = compressedFile.length(); // 🔥 Otteniamo la dimensione del file compresso
 
-            // 🔹 Ottieni le credenziali per il presigned URL
+            // 📦 🔍 Determina il bucket con spazio sufficiente
+            String bucketName = determineBucket(sezione.getTitolo(), fileSize);
+            LOGGER.info("📦 Bucket selezionato per il video: " + bucketName);
+
+            S3Client s3Client = backblazeAccounts.get(bucketName);
+            if (s3Client == null) {
+                throw new InternalServerErrorException("❌ Nessun client S3 trovato per il bucket: " + bucketName);
+            }
+
+            Video video = new Video();
+            video.setTitolo(dto.getTitolo());
+            video.setDurata(dto.getDurata());
+            video.setStagione(stagione);
+            video.setSezione(sezione);
+
+            // 🔹 Carica il file nel bucket selezionato
+            String uploadedUrl = uploadToBackblazeB2(s3Client, bucketName, compressedFile);
+            LOGGER.info("✅ File caricato su Backblaze B2: " + uploadedUrl);
+
+            // 🔹 Ottieni le credenziali per generare il presigned URL
             String keyId = backblazeB2Config.keyIdMapping().get(bucketName);
             String applicationKey = backblazeB2Config.applicationKeyMapping().get(bucketName);
 
@@ -182,18 +210,19 @@ public class VideoService {
                 throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + bucketName);
             }
 
-            // 🔹 Genera l'URL firmato
+            // 🔹 Genera il link firmato
             String presignedUrl = generatePresignedUrl(uploadedUrl, bucketName, keyId, applicationKey);
+            LOGGER.info("✅ Link firmato generato: " + presignedUrl);
 
             video.setFileLink(uploadedUrl);
             Video savedVideo = videoRepository.save(video);
 
-            // 🔹 Crea e restituisce il VideoRespDTO
+            // 🔹 Crea e restituisce il DTO con il link firmato
             return new VideoRespDTO(
                     savedVideo.getId(),
                     savedVideo.getTitolo(),
                     savedVideo.getDurata(),
-                    presignedUrl, // Ora restituisce direttamente il link firmato
+                    presignedUrl,
                     savedVideo.getStagione() != null ? savedVideo.getStagione().getTitolo() : null,
                     savedVideo.getSezione().getTitolo()
             );
@@ -210,41 +239,86 @@ public class VideoService {
 
 
 
+
     /**
      * 🔹 Determina il bucket corretto da usare
      */
-    private String determineBucket(String sezioneNome) {
+    private String determineBucket(String sezioneNome, long fileSize) {
         List<String> buckets = new ArrayList<>(keyIdMapping.keySet());
 
         if (buckets.isEmpty()) {
             throw new InternalServerErrorException("❌ Nessun bucket disponibile per l'upload!");
         }
 
-        // 🔹 Alterna i bucket in modo bilanciato (round-robin)
-        int index = (int) (System.currentTimeMillis() % buckets.size());
+        for (String bucket : buckets) {
+            if (hasAvailableSpace(bucket, fileSize)) {
+                LOGGER.info("✅ Bucket selezionato con spazio disponibile: " + bucket);
+                return bucket;
+            }
+        }
 
-        String selectedBucket = buckets.get(index);
-        LOGGER.info("✅ Bucket assegnato: " + selectedBucket);
-
-        return selectedBucket;
+        throw new InternalServerErrorException("❌ Nessun bucket ha spazio sufficiente per il file di " + fileSize + " byte.");
     }
+
 
     /**
      * 🔹 Verifica se un bucket ha spazio disponibile
      */
-    private boolean hasAvailableSpace(String bucketName) {
+    private boolean hasAvailableSpace(String bucketName, long fileSize) {
         S3Client s3Client = backblazeAccounts.get(bucketName);
-        if (s3Client == null) return false;
+        if (s3Client == null) {
+            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
+            return false;
+        }
 
         try {
-            // Esegue una richiesta HeadBucket per verificare se il bucket risponde
-            s3Client.headBucket(builder -> builder.bucket(bucketName));
-            return true; // Se la richiesta ha successo, il bucket è disponibile
+            // Ottiene i metadati del bucket (Backblaze B2 non fornisce direttamente lo spazio disponibile,
+            // quindi qui dovresti avere un metodo per monitorare l'uso dello storage)
+            long usedStorage = getUsedStorage(bucketName); // Questa funzione dovrà essere implementata
+
+            // Imposta una soglia massima per il bucket (es. 1 TB = 1_000_000_000_000 bytes)
+            long maxBucketSize = 1_000_000_000_000L;
+
+            // Calcola lo spazio disponibile
+            long availableSpace = maxBucketSize - usedStorage;
+
+            if (availableSpace >= fileSize) {
+                LOGGER.info("✅ Spazio sufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili.");
+                return true;
+            } else {
+                LOGGER.warning("⚠ Spazio insufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili, ma il file richiede " + fileSize + " bytes.");
+                return false;
+            }
         } catch (Exception e) {
-            LOGGER.warning("⚠ Il bucket " + bucketName + " non è disponibile.");
+            LOGGER.warning("⚠ Errore nel controllare lo spazio disponibile per il bucket " + bucketName + ": " + e.getMessage());
             return false;
         }
     }
+
+
+
+    private long getUsedStorage(String bucketName) {
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) {
+            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
+            return 0L;
+        }
+
+        try {
+            long totalSize = s3Client.listObjectsV2(builder -> builder.bucket(bucketName))
+                    .contents()
+                    .stream()
+                    .mapToLong(obj -> obj.size())
+                    .sum();
+
+            LOGGER.info("📦 Spazio usato nel bucket " + bucketName + ": " + totalSize + " bytes");
+            return totalSize;
+        } catch (Exception e) {
+            LOGGER.warning("⚠ Errore nel recuperare lo spazio usato per il bucket " + bucketName + ": " + e.getMessage());
+            return 0L; // In caso di errore, assumiamo 0 per non bloccare il sistema
+        }
+    }
+
 
 
     private String generatePresignedUrl(String fileUrl, String bucketName, String keyId, String applicationKey) {
