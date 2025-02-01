@@ -144,17 +144,13 @@ public class VideoService {
         }
     }
 
-    public Video createVideo(NewVideoDTO dto, MultipartFile file) {
+    public VideoRespDTO createVideo(NewVideoDTO dto, MultipartFile file) {
         Stagione stagione = stagioneRepository.findById(dto.getStagioneId())
                 .orElseThrow(() -> new NotFoundException("Stagione non trovata con l'ID: " + dto.getStagioneId()));
 
         Sezione sezione = stagione.getSezione();
-
-        // 📦 🔍 Determina il bucket corretto passando il nome della sezione
         String bucketName = determineBucket(sezione.getTitolo());
-        LOGGER.info("📦 Bucket selezionato per il video: " + bucketName);
 
-        // 🔍 Recupera il client S3 associato al bucket
         S3Client s3Client = backblazeAccounts.get(bucketName);
         if (s3Client == null) {
             throw new InternalServerErrorException("❌ Nessun client S3 trovato per il bucket: " + bucketName);
@@ -175,25 +171,42 @@ public class VideoService {
                 fos.write(file.getBytes());
             }
 
-            LOGGER.info("📁 File originale ricevuto: " + tempFile.getAbsolutePath());
-
-            // 🔹 Comprimi il video con FFmpeg prima di caricarlo
             compressedFile = compressVideo(tempFile);
-
-            LOGGER.info("🚀 Inizio caricamento su Backblaze B2...");
             String uploadedUrl = uploadToBackblazeB2(s3Client, bucketName, compressedFile);
-            LOGGER.info("✅ Caricamento completato, URL: " + uploadedUrl);
+
+            // 🔹 Ottieni le credenziali per il presigned URL
+            String keyId = backblazeB2Config.keyIdMapping().get(bucketName);
+            String applicationKey = backblazeB2Config.applicationKeyMapping().get(bucketName);
+
+            if (keyId == null || applicationKey == null) {
+                throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + bucketName);
+            }
+
+            // 🔹 Genera l'URL firmato
+            String presignedUrl = generatePresignedUrl(uploadedUrl, bucketName, keyId, applicationKey);
 
             video.setFileLink(uploadedUrl);
-            return videoRepository.save(video);
+            Video savedVideo = videoRepository.save(video);
+
+            // 🔹 Crea e restituisce il VideoRespDTO
+            return new VideoRespDTO(
+                    savedVideo.getId(),
+                    savedVideo.getTitolo(),
+                    savedVideo.getDurata(),
+                    presignedUrl, // Ora restituisce direttamente il link firmato
+                    savedVideo.getStagione() != null ? savedVideo.getStagione().getTitolo() : null,
+                    savedVideo.getSezione().getTitolo()
+            );
         } catch (Exception e) {
-            LOGGER.severe("❌ Errore durante la creazione del video: " + e.getMessage());
             throw new InternalServerErrorException("Errore nella gestione del file: " + e.getMessage());
         } finally {
             if (tempFile != null) tempFile.delete();
             if (compressedFile != null) compressedFile.delete();
         }
     }
+
+
+
 
 
 
@@ -245,6 +258,8 @@ public class VideoService {
             String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
             LOGGER.info("🔹 Generazione URL firmato per il file: " + fileName);
             LOGGER.info("🔹 Bucket: " + bucketName);
+            LOGGER.info("🔹 KeyID usata: " + keyId);
+            LOGGER.info("🔹 ApplicationKey usata: " + applicationKey);
 
             // Crea la richiesta per ottenere il file
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
@@ -266,6 +281,7 @@ public class VideoService {
             throw new InternalServerErrorException("Errore nella generazione del link firmato.");
         }
     }
+
 
 
 

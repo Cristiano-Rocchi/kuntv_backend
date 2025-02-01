@@ -46,7 +46,7 @@ public class VideoController {
     // Creazione di un nuovo video con caricamento su Cloudinary (solo admin)
     @PostMapping("/upload")
     @PreAuthorize("hasRole('admin')")
-    public ResponseEntity<Video> createVideo(
+    public ResponseEntity<VideoRespDTO> createVideo(
             @RequestParam("file") MultipartFile file,
             @RequestParam String titolo,
             @RequestParam String durata,
@@ -59,7 +59,8 @@ public class VideoController {
             newVideoDTO.setStagioneId(stagioneId);
 
             // Chiama il servizio per creare il video
-            Video createdVideo = videoService.createVideo(newVideoDTO, file);
+            VideoRespDTO createdVideo = videoService.createVideo(newVideoDTO, file);
+
             return ResponseEntity.status(201).body(createdVideo);
         } catch (NotFoundException e) {
             return ResponseEntity.status(400).body(null); // Stagione non trovata
@@ -67,6 +68,7 @@ public class VideoController {
             return ResponseEntity.status(500).body(null); // Errore interno
         }
     }
+
 
 
 
