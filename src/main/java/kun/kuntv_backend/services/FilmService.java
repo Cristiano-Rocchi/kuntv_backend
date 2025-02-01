@@ -1,5 +1,6 @@
 package kun.kuntv_backend.services;
 
+import kun.kuntv_backend.config.BackblazeB2Config;
 import kun.kuntv_backend.entities.Collection;
 import kun.kuntv_backend.entities.Film;
 import kun.kuntv_backend.enums.CollectionType;
@@ -10,7 +11,10 @@ import kun.kuntv_backend.repositories.FilmRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -36,7 +40,13 @@ public class FilmService {
     private CollectionRepository collectionRepository;
 
     @Autowired
+    private BackblazeB2Config backblazeB2Config;
+
+    @Autowired
     private Map<String, S3Client> backblazeAccounts; // Multiaccount
+
+    @Autowired
+    private Map<String, String> keyIdMapping;
 
     public Film createFilm(Film film, CollectionType tipo, MultipartFile file) {
         // Trova o crea una nuova collezione per il film
@@ -48,13 +58,6 @@ public class FilmService {
                 });
 
         film.setCollection(collection);
-        String bucketName = collection.getTipo().name().toLowerCase(); // Usa il tipo di collezione come bucketName
-
-        // Ottieni il client S3 associato al bucket
-        S3Client s3Client = backblazeAccounts.get(bucketName);
-        if (s3Client == null) {
-            throw new InternalServerErrorException("❌ Nessun account Backblaze trovato per il bucket: " + bucketName);
-        }
 
         File tempFile = null;
         File compressedFile = null;
@@ -68,18 +71,39 @@ public class FilmService {
 
             LOGGER.info("📁 File originale ricevuto: " + tempFile.getAbsolutePath());
 
-            // 🔹 Comprimi il video con FFmpeg prima di caricarlo
+            // 🔹 Comprimi il video prima di determinare il bucket
             compressedFile = compressVideo(tempFile);
+            long fileSize = compressedFile.length(); // Otteniamo la dimensione del file compresso
 
-            // 🔹 Carica il video su Backblaze B2
+            // 📦 🔍 Determina il bucket con spazio disponibile
+            String bucketName = determineBucket(collection.getTipo().name().toLowerCase(), fileSize);
+            LOGGER.info("📦 Bucket selezionato per il film: " + bucketName);
+
+            // Ottieni il client S3 associato al bucket selezionato
+            S3Client s3Client = backblazeAccounts.get(bucketName);
+            if (s3Client == null) {
+                throw new InternalServerErrorException("❌ Nessun client S3 trovato per il bucket: " + bucketName);
+            }
+
+            // 🔹 Carica il file nel bucket selezionato
             String uploadedUrl = uploadToBackblazeB2(s3Client, bucketName, compressedFile);
+            LOGGER.info("✅ File caricato su Backblaze B2: " + uploadedUrl);
 
             // 🔹 Genera il link firmato
-            String presignedUrl = generatePresignedUrl(s3Client, bucketName, uploadedUrl);
+            // 🔹 Ottieni le credenziali per il bucket selezionato
+            String keyId = backblazeB2Config.keyIdMapping().get(bucketName);
+            String applicationKey = backblazeB2Config.applicationKeyMapping().get(bucketName);
+
+            if (keyId == null || applicationKey == null) {
+                throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + bucketName);
+            }
+
+// 🔹 Genera il link firmato
+            String presignedUrl = generatePresignedUrl(uploadedUrl, bucketName, keyId, applicationKey);
+            LOGGER.info("✅ Link firmato generato: " + presignedUrl);
 
             // 🔹 Imposta l'URL firmato nel film
             film.setVideoUrl(presignedUrl);
-            LOGGER.info("✅ Video caricato su Backblaze B2 e link firmato generato: " + presignedUrl);
 
             // Salva il film con il link firmato
             return filmRepository.save(film);
@@ -95,28 +119,38 @@ public class FilmService {
     /**
      * 🔹 Metodo per generare il link firmato
      */
-    private String generatePresignedUrl(S3Client s3Client, String bucketName, String fileUrl) {
+    private String generatePresignedUrl(String fileUrl, String bucketName, String keyId, String applicationKey) {
         try (S3Presigner presigner = S3Presigner.builder()
+                .region(Region.US_EAST_1)
                 .endpointOverride(URI.create("https://s3.us-east-005.backblazeb2.com"))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(keyId, applicationKey)))
                 .build()) {
 
             // 🔹 Estrai solo il nome del file dall'URL
             String fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
+            LOGGER.info("🔹 Generazione URL firmato per il file: " + fileName);
+            LOGGER.info("🔹 Bucket: " + bucketName);
+            LOGGER.info("🔹 KeyID usata: " + keyId);
+            LOGGER.info("🔹 ApplicationKey usata: " + applicationKey);
 
+            // Crea la richiesta per ottenere il file
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                     .bucket(bucketName)
                     .key(fileName)
                     .build();
 
+            // Genera il link firmato
             PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(r ->
                     r.signatureDuration(Duration.ofHours(1))
                             .getObjectRequest(getObjectRequest));
 
             String signedUrl = presignedRequest.url().toString();
             LOGGER.info("✅ URL firmato generato: " + signedUrl);
+
             return signedUrl;
         } catch (Exception e) {
-            throw new InternalServerErrorException("❌ Errore nella generazione del link firmato: " + e.getMessage());
+            LOGGER.severe("❌ Errore nella generazione del link firmato: " + e.getMessage());
+            throw new InternalServerErrorException("Errore nella generazione del link firmato.");
         }
     }
 
@@ -126,18 +160,22 @@ public class FilmService {
     private String uploadToBackblazeB2(S3Client s3Client, String bucketName, File file) throws IOException {
         LOGGER.info("🚀 Inizio caricamento file: " + file.getName() + " su Backblaze B2 (Bucket: " + bucketName + ")...");
 
-        PutObjectRequest uploadRequest = PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(file.getName())
-                .build();
+        try {
+            PutObjectRequest uploadRequest = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(file.getName())
+                    .build();
 
-        s3Client.putObject(uploadRequest, RequestBody.fromFile(file));
+            s3Client.putObject(uploadRequest, RequestBody.fromFile(file));
 
-        String fileUrl = s3Client.utilities().getUrl(builder -> builder.bucket(bucketName).key(file.getName())).toString();
+            String fileUrl = "https://" + bucketName + ".s3.us-east-005.backblazeb2.com/" + file.getName();
 
-        LOGGER.info("✅ Upload completato con successo! URL: " + fileUrl);
-
-        return fileUrl;
+            LOGGER.info("✅ Upload completato con successo! URL: " + fileUrl);
+            return fileUrl;
+        } catch (Exception e) {
+            LOGGER.severe("❌ Errore durante l'upload su Backblaze B2: " + e.getMessage());
+            throw new InternalServerErrorException("Errore durante l'upload su Backblaze B2.");
+        }
     }
 
     /**
@@ -169,6 +207,80 @@ public class FilmService {
         } else {
             LOGGER.info("✅ Compressione completata in " + (endTime - startTime) + " ms");
             return compressedFile;
+        }
+    }
+
+
+    private boolean hasAvailableSpace(String bucketName, long fileSize) {
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) {
+            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
+            return false;
+        }
+
+        try {
+            // Ottiene i metadati del bucket (Backblaze B2 non fornisce direttamente lo spazio disponibile,
+            // quindi qui dovresti avere un metodo per monitorare l'uso dello storage)
+            long usedStorage = getUsedStorage(bucketName); // Questa funzione dovrà essere implementata
+
+            // Imposta una soglia massima per il bucket (es. 1 TB = 1_000_000_000_000 bytes)
+            long maxBucketSize = 1_000_000_000_000L;
+
+            // Calcola lo spazio disponibile
+            long availableSpace = maxBucketSize - usedStorage;
+
+            if (availableSpace >= fileSize) {
+                LOGGER.info("✅ Spazio sufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili.");
+                return true;
+            } else {
+                LOGGER.warning("⚠ Spazio insufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili, ma il file richiede " + fileSize + " bytes.");
+                return false;
+            }
+        } catch (Exception e) {
+            LOGGER.warning("⚠ Errore nel controllare lo spazio disponibile per il bucket " + bucketName + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+
+    private String determineBucket(String collectionTipo, long fileSize) {
+        List<String> buckets = new ArrayList<>(keyIdMapping.keySet());
+
+        if (buckets.isEmpty()) {
+            throw new InternalServerErrorException("❌ Nessun bucket disponibile per l'upload!");
+        }
+
+        for (String bucket : buckets) {
+            if (hasAvailableSpace(bucket, fileSize)) {
+                LOGGER.info("✅ Bucket selezionato per il tipo di collezione " + collectionTipo + ": " + bucket);
+                return bucket;
+            }
+        }
+
+        throw new InternalServerErrorException("❌ Nessun bucket ha spazio sufficiente per il file di " + fileSize + " byte.");
+    }
+
+
+
+    private long getUsedStorage(String bucketName) {
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) {
+            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
+            return 0L;
+        }
+
+        try {
+            long totalSize = s3Client.listObjectsV2(builder -> builder.bucket(bucketName))
+                    .contents()
+                    .stream()
+                    .mapToLong(obj -> obj.size())
+                    .sum();
+
+            LOGGER.info("📦 Spazio usato nel bucket " + bucketName + ": " + totalSize + " bytes");
+            return totalSize;
+        } catch (Exception e) {
+            LOGGER.warning("⚠ Errore nel recuperare lo spazio usato per il bucket " + bucketName + ": " + e.getMessage());
+            return 0L; // In caso di errore, assumiamo 0 per non bloccare il sistema
         }
     }
 
