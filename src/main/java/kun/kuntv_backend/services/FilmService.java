@@ -48,6 +48,36 @@ public class FilmService {
     @Autowired
     private Map<String, String> keyIdMapping;
 
+    //TROVA TUTTI I VIDEO
+    public List<Film> getAllFilms() {
+        return filmRepository.findAll();
+    }
+
+
+    // TROVA SINGOLO VIDEO
+    public Optional<Film> getFilmById(Long id) {
+        return filmRepository.findById(id);
+    }
+
+
+    // MODIFICA VIDEO
+    public Film updateFilm(Film film) {
+        return filmRepository.save(film);
+    }
+
+
+    //ELIMINA VIDEO
+    public void deleteFilm(Long id) {
+        if (!filmRepository.existsById(id)) {
+            throw new NotFoundException("Film not found with ID: " + id);
+        }
+        filmRepository.deleteById(id);
+    }
+
+
+    // ESTRAI NOME BUCKET DALL'URL
+
+    //CREAZIONE VIDEO
     public Film createFilm(Film film, CollectionType tipo, MultipartFile file) {
         // Trova o crea una nuova collezione per il film
         Collection collection = collectionRepository.findByTipo(tipo)
@@ -116,9 +146,110 @@ public class FilmService {
         }
     }
 
-    /**
-     * 🔹 Metodo per generare il link firmato
-     */
+    // COMPRIME VIDEO CON FFMPEG
+    private File compressVideo(File inputFile) throws IOException, InterruptedException {
+        File compressedFile = new File(inputFile.getParent(), "compressed_" + inputFile.getName());
+
+        String command = String.format("C:\\ffmpeg-7.1-full_build\\bin\\ffmpeg.exe -i \"%s\" -vcodec libx265 -crf 24 \"%s\"",
+                inputFile.getAbsolutePath(),
+                compressedFile.getAbsolutePath());
+
+        long startTime = System.currentTimeMillis();
+        Process process = Runtime.getRuntime().exec(command);
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                LOGGER.info("FFmpeg: " + line);
+            }
+        }
+
+        int exitCode = process.waitFor();
+        long endTime = System.currentTimeMillis();
+
+        if (exitCode != 0 || !compressedFile.exists() || compressedFile.length() == 0) {
+            LOGGER.warning("⚠ Compressione fallita, uso file originale.");
+            return inputFile;
+        } else {
+            LOGGER.info("✅ Compressione completata in " + (endTime - startTime) + " ms");
+            return compressedFile;
+        }
+    }
+
+    // DETERMINA BUCKET CORRETTO DA USARE
+    private String determineBucket(String collectionTipo, long fileSize) {
+        List<String> buckets = new ArrayList<>(keyIdMapping.keySet());
+
+        if (buckets.isEmpty()) {
+            throw new InternalServerErrorException("❌ Nessun bucket disponibile per l'upload!");
+        }
+
+        for (String bucket : buckets) {
+            if (hasAvailableSpace(bucket, fileSize)) {
+                LOGGER.info("✅ Bucket selezionato per il tipo di collezione " + collectionTipo + ": " + bucket);
+                return bucket;
+            }
+        }
+
+        throw new InternalServerErrorException("❌ Nessun bucket ha spazio sufficiente per il file di " + fileSize + " byte.");
+    }
+
+    // VERIFICA SPAZIO DISPONIBILE NEL BUCK
+    private boolean hasAvailableSpace(String bucketName, long fileSize) {
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) {
+            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
+            return false;
+        }
+
+        try {
+            // Ottiene i metadati del bucket (Backblaze B2 non fornisce direttamente lo spazio disponibile,
+            // quindi qui dovresti avere un metodo per monitorare l'uso dello storage)
+            long usedStorage = getUsedStorage(bucketName); // Questa funzione dovrà essere implementata
+
+            // Imposta una soglia massima per il bucket (es. 1 TB = 1_000_000_000_000 bytes)
+            long maxBucketSize = 1_000_000_000_000L;
+
+            // Calcola lo spazio disponibile
+            long availableSpace = maxBucketSize - usedStorage;
+
+            if (availableSpace >= fileSize) {
+                LOGGER.info("✅ Spazio sufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili.");
+                return true;
+            } else {
+                LOGGER.warning("⚠ Spazio insufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili, ma il file richiede " + fileSize + " bytes.");
+                return false;
+            }
+        } catch (Exception e) {
+            LOGGER.warning("⚠ Errore nel controllare lo spazio disponibile per il bucket " + bucketName + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    //OTTIENE LO SPAZIO UTILIZZATO NEL BUCKET
+    private long getUsedStorage(String bucketName) {
+        S3Client s3Client = backblazeAccounts.get(bucketName);
+        if (s3Client == null) {
+            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
+            return 0L;
+        }
+
+        try {
+            long totalSize = s3Client.listObjectsV2(builder -> builder.bucket(bucketName))
+                    .contents()
+                    .stream()
+                    .mapToLong(obj -> obj.size())
+                    .sum();
+
+            LOGGER.info("📦 Spazio usato nel bucket " + bucketName + ": " + totalSize + " bytes");
+            return totalSize;
+        } catch (Exception e) {
+            LOGGER.warning("⚠ Errore nel recuperare lo spazio usato per il bucket " + bucketName + ": " + e.getMessage());
+            return 0L; // In caso di errore, assumiamo 0 per non bloccare il sistema
+        }
+    }
+
+    // GENERA PRESIGNED URL
     private String generatePresignedUrl(String fileUrl, String bucketName, String keyId, String applicationKey) {
         try (S3Presigner presigner = S3Presigner.builder()
                 .region(Region.US_EAST_1)
@@ -154,9 +285,7 @@ public class FilmService {
         }
     }
 
-    /**
-     * 🔹 Metodo per caricare un file su Backblaze B2
-     */
+    // CARICA FILE NEL DB(BACKBLAZE B2)
     private String uploadToBackblazeB2(S3Client s3Client, String bucketName, File file) throws IOException {
         LOGGER.info("🚀 Inizio caricamento file: " + file.getName() + " su Backblaze B2 (Bucket: " + bucketName + ")...");
 
@@ -178,128 +307,29 @@ public class FilmService {
         }
     }
 
-    /**
-     * 🔹 Metodo per comprimere il video con FFmpeg
-     */
-    private File compressVideo(File inputFile) throws IOException, InterruptedException {
-        File compressedFile = new File(inputFile.getParent(), "compressed_" + inputFile.getName());
-
-        String command = String.format("C:\\ffmpeg-7.1-full_build\\bin\\ffmpeg.exe -i \"%s\" -vcodec libx265 -crf 24 \"%s\"",
-                inputFile.getAbsolutePath(),
-                compressedFile.getAbsolutePath());
-
-        long startTime = System.currentTimeMillis();
-        Process process = Runtime.getRuntime().exec(command);
-
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                LOGGER.info("FFmpeg: " + line);
-            }
-        }
-
-        int exitCode = process.waitFor();
-        long endTime = System.currentTimeMillis();
-
-        if (exitCode != 0 || !compressedFile.exists() || compressedFile.length() == 0) {
-            LOGGER.warning("⚠ Compressione fallita, uso file originale.");
-            return inputFile;
-        } else {
-            LOGGER.info("✅ Compressione completata in " + (endTime - startTime) + " ms");
-            return compressedFile;
-        }
-    }
-
-
-    private boolean hasAvailableSpace(String bucketName, long fileSize) {
-        S3Client s3Client = backblazeAccounts.get(bucketName);
-        if (s3Client == null) {
-            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
-            return false;
-        }
-
-        try {
-            // Ottiene i metadati del bucket (Backblaze B2 non fornisce direttamente lo spazio disponibile,
-            // quindi qui dovresti avere un metodo per monitorare l'uso dello storage)
-            long usedStorage = getUsedStorage(bucketName); // Questa funzione dovrà essere implementata
-
-            // Imposta una soglia massima per il bucket (es. 1 TB = 1_000_000_000_000 bytes)
-            long maxBucketSize = 1_000_000_000_000L;
-
-            // Calcola lo spazio disponibile
-            long availableSpace = maxBucketSize - usedStorage;
-
-            if (availableSpace >= fileSize) {
-                LOGGER.info("✅ Spazio sufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili.");
-                return true;
-            } else {
-                LOGGER.warning("⚠ Spazio insufficiente nel bucket " + bucketName + ": " + availableSpace + " bytes disponibili, ma il file richiede " + fileSize + " bytes.");
-                return false;
-            }
-        } catch (Exception e) {
-            LOGGER.warning("⚠ Errore nel controllare lo spazio disponibile per il bucket " + bucketName + ": " + e.getMessage());
-            return false;
-        }
-    }
-
-
-    private String determineBucket(String collectionTipo, long fileSize) {
-        List<String> buckets = new ArrayList<>(keyIdMapping.keySet());
-
-        if (buckets.isEmpty()) {
-            throw new InternalServerErrorException("❌ Nessun bucket disponibile per l'upload!");
-        }
-
-        for (String bucket : buckets) {
-            if (hasAvailableSpace(bucket, fileSize)) {
-                LOGGER.info("✅ Bucket selezionato per il tipo di collezione " + collectionTipo + ": " + bucket);
-                return bucket;
-            }
-        }
-
-        throw new InternalServerErrorException("❌ Nessun bucket ha spazio sufficiente per il file di " + fileSize + " byte.");
-    }
 
 
 
-    private long getUsedStorage(String bucketName) {
-        S3Client s3Client = backblazeAccounts.get(bucketName);
-        if (s3Client == null) {
-            LOGGER.warning("⚠ Nessun client S3 trovato per il bucket: " + bucketName);
-            return 0L;
-        }
 
-        try {
-            long totalSize = s3Client.listObjectsV2(builder -> builder.bucket(bucketName))
-                    .contents()
-                    .stream()
-                    .mapToLong(obj -> obj.size())
-                    .sum();
 
-            LOGGER.info("📦 Spazio usato nel bucket " + bucketName + ": " + totalSize + " bytes");
-            return totalSize;
-        } catch (Exception e) {
-            LOGGER.warning("⚠ Errore nel recuperare lo spazio usato per il bucket " + bucketName + ": " + e.getMessage());
-            return 0L; // In caso di errore, assumiamo 0 per non bloccare il sistema
-        }
-    }
 
-    public Optional<Film> getFilmById(Long id) {
-        return filmRepository.findById(id);
-    }
 
-    public List<Film> getAllFilms() {
-        return filmRepository.findAll();
-    }
 
-    public Film updateFilm(Film film) {
-        return filmRepository.save(film);
-    }
 
-    public void deleteFilm(Long id) {
-        if (!filmRepository.existsById(id)) {
-            throw new NotFoundException("Film not found with ID: " + id);
-        }
-        filmRepository.deleteById(id);
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
