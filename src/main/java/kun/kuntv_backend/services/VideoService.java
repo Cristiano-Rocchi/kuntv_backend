@@ -118,17 +118,16 @@ public class VideoService {
                 .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
 
         try {
-            // Estrai il nome del file e il bucket associato
             String fileName = video.getFileLink().substring(video.getFileLink().lastIndexOf("/") + 1);
-            String bucketName = video.getSezione().getTitolo();
 
-            // Recupera il client S3 associato al bucket
+            // Usa la stessa funzione di estrazione del bucketName da fileLink
+            String bucketName = extractBucketNameFromUrl(video.getFileLink());
+
             S3Client s3Client = backblazeAccounts.get(bucketName);
             if (s3Client == null) {
                 throw new InternalServerErrorException("❌ Nessun account Backblaze trovato per il bucket: " + bucketName);
             }
 
-            // Esegui la cancellazione dal bucket
             DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
                     .bucket(bucketName)
                     .key(fileName)
@@ -143,6 +142,7 @@ public class VideoService {
             throw new InternalServerErrorException("❌ Errore durante la cancellazione del video: " + e.getMessage());
         }
     }
+
 
 
     // ESTRAI NOME BUCKET DALL'URL
