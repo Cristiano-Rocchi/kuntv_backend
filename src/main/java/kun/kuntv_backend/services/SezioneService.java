@@ -39,6 +39,8 @@ public class SezioneService {
 
     @Autowired
     private CollectionRepository collectionRepository;
+    @Autowired
+    private StagioneService stagioneService;
 
     @Autowired
     private List<Cloudinary> cloudinaryAccounts;
@@ -123,12 +125,17 @@ public class SezioneService {
             throw new NotFoundException("Sezione non trovata con ID: " + id);
         }
         try {
+            // Recupera tutte le stagioni di questa sezione
             List<Stagione> stagioni = stagioneRepository.findBySezioneId(id);
+
+            // Per ogni stagione, chiama deleteStagione(...) invece di fare tutto a mano
             for (Stagione stagione : stagioni) {
-                List<Video> videoList = videoRepository.findByStagioneId(stagione.getId());
-                videoRepository.deleteAll(videoList);
-                stagioneRepository.delete(stagione);
+                // Questo metodo, se l'hai modificato come da consiglio precedente,
+                // si occuperà anche di eliminare i file su Backblaze B2
+                stagioneService.deleteStagione(stagione.getId());
             }
+
+            // Infine, elimina la sezione
             sezioneRepository.deleteById(id);
             return true;
         } catch (Exception e) {

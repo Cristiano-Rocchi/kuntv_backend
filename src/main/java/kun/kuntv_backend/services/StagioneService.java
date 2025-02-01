@@ -28,6 +28,8 @@ public class StagioneService {
     private VideoRepository videoRepository;
     @Autowired
     private SezioneRepository sezioneRepository;
+    @Autowired
+    private VideoService videoService;
 
 
     // Ottieni tutte le stagioni
@@ -115,12 +117,15 @@ public class StagioneService {
             Stagione stagione = stagioneRepository.findById(id).orElse(null);
 
             if (stagione != null) {
+                // Recupera i video associati alla stagione
                 List<Video> videoList = videoRepository.findByStagioneId(id);
                 for (Video video : videoList) {
-                    videoRepository.delete(video);
+                    // Usa il metodo del VideoService per eliminare il video dal db e da Backblaze
+                    videoService.deleteVideo(video.getId());
                 }
             }
 
+            // Infine, elimina la stagione
             stagioneRepository.deleteById(id);
             return true;
         } catch (Exception e) {
