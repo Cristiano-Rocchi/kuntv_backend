@@ -67,15 +67,69 @@ public class FilmService {
 
 
     //ELIMINA VIDEO
+    // ELIMINA VIDEO
     public void deleteFilm(Long id) {
-        if (!filmRepository.existsById(id)) {
-            throw new NotFoundException("Film not found with ID: " + id);
+        // Verifica che il film esista nel DB
+        Film film = filmRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Film not found with ID: " + id));
+
+        try {
+            // Usa il campo esistente videoUrl (presigned o diretto)
+            String videoUrl = film.getVideoUrl();
+            if (videoUrl == null || videoUrl.isEmpty()) {
+                // Se non abbiamo un link valido, elimina solo il record DB
+                filmRepository.deleteById(id);
+                return;
+            }
+
+            // 1) Estrai il bucketName usando il metodo interno
+            String bucketName = extractBucketNameFromUrl(videoUrl);
+
+            // 2) Ricava il nome del file dalla parte finale dell'URL
+            String fileName = videoUrl.substring(videoUrl.lastIndexOf("/") + 1);
+
+            // 3) Recupera il client S3 associato al bucket
+            S3Client s3Client = backblazeAccounts.get(bucketName);
+            if (s3Client == null) {
+                throw new InternalServerErrorException("❌ Nessun client S3 trovato per il bucket: " + bucketName);
+            }
+
+            // 4) Crea la richiesta di cancellazione
+            DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(fileName)
+                    .build();
+
+            // 5) Elimina il file su Backblaze B2
+            s3Client.deleteObject(deleteObjectRequest);
+            LOGGER.info("✅ File eliminato con successo da Backblaze B2: " + fileName);
+
+            // 6) Elimina il record dal DB
+            filmRepository.deleteById(id);
+
+        } catch (Exception e) {
+            throw new InternalServerErrorException("❌ Errore durante la cancellazione del film: " + e.getMessage());
         }
-        filmRepository.deleteById(id);
     }
 
 
+
     // ESTRAI NOME BUCKET DALL'URL
+
+    private String extractBucketNameFromUrl(String fileUrl) {
+        try {
+            URI uri = new URI(fileUrl);
+            String host = uri.getHost(); // es: "kun-tv2.s3.us-east-005.backblazeb2.com"
+            if (host == null || !host.contains(".")) {
+                throw new InternalServerErrorException("❌ URL non valido: " + fileUrl);
+            }
+            // Il bucket è la prima parte del dominio
+            String bucketName = host.split("\\.")[0];
+            return bucketName;
+        } catch (Exception e) {
+            throw new InternalServerErrorException("❌ Errore nell'estrazione del bucket dall'URL: " + fileUrl + " - " + e.getMessage());
+        }
+    }
 
     //CREAZIONE VIDEO
     public Film createFilm(Film film, CollectionType tipo, MultipartFile file) {
