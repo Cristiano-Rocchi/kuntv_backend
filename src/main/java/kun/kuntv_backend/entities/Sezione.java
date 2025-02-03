@@ -3,6 +3,7 @@ package kun.kuntv_backend.entities;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
+import kun.kuntv_backend.enums.TagSezione;
 import lombok.*;
 
 import java.util.List;
@@ -27,11 +28,15 @@ public class Sezione {
     @Column(nullable = false)
     private String fotoUrl;
 
-    @Column
-    private String tag;
-
     @Column(nullable = false)
     private String anno;
+
+    @ElementCollection(targetClass = TagSezione.class)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private List<TagSezione> tag;
+
+
 
     @OneToMany(mappedBy = "sezione")
     @JsonManagedReference("sezione-video")

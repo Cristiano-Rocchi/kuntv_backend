@@ -27,6 +27,9 @@ public class Stagione {
     @Column(nullable = false)
     private String anno;
 
+    @Column(nullable = true)
+    private String immagineUrl;
+
     @ManyToOne
     @JoinColumn(name = "sezione_id", nullable = false)
     @JsonBackReference("sezione-stagioni")

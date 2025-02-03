@@ -14,5 +14,6 @@ public class StagioneRespDTO {
     private UUID id;
     private String titolo;
     private String anno;
+    private String immagineUrl; // URL dell'immagine (opzionale)
     private String sezioneTitolo;    // Titolo della sezione associata
     private List<String> videoTitoli; }

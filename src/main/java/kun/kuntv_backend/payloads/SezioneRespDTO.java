@@ -1,5 +1,6 @@
 package kun.kuntv_backend.payloads;
 
+import kun.kuntv_backend.enums.TagSezione;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +15,7 @@ public class SezioneRespDTO {
     private UUID id;
     private String titolo;
     private String foto;
-    private String tag;
+    private List<TagSezione> tag;
     private String anno;
     private List<String> stagioniTitoli; // Lista dei titoli delle stagioni
     private List<String> videoTitoli;

@@ -1,5 +1,7 @@
 package kun.kuntv_backend.services;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
@@ -13,7 +15,9 @@ import kun.kuntv_backend.repositories.StagioneRepository;
 import kun.kuntv_backend.repositories.VideoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +34,8 @@ public class StagioneService {
     private SezioneRepository sezioneRepository;
     @Autowired
     private VideoService videoService;
+    @Autowired
+    private List<Cloudinary> cloudinaryAccounts;
 
 
     // Ottieni tutte le stagioni
@@ -40,6 +46,7 @@ public class StagioneService {
                         stagione.getId(),
                         stagione.getTitolo(),
                         stagione.getAnno(),
+                        stagione.getImmagineUrl(),
                         stagione.getSezione().getTitolo(),
                         stagione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
                 ))
@@ -75,16 +82,30 @@ public class StagioneService {
     }
 
     // Crea una nuova stagione (solo admin)
-    public Stagione createStagione(NewStagioneDTO dto) {
-        // Recupera la sezione dal database utilizzando l'ID fornito
+    // Metodo per scegliere un account Cloudinary in modo bilanciato
+    private Cloudinary getCloudinaryInstance() {
+        return cloudinaryAccounts.get((int) (Math.random() * cloudinaryAccounts.size()));
+    }
+
+    // Crea una nuova stagione (supporta upload immagine opzionale)
+    public Stagione createStagione(NewStagioneDTO dto, MultipartFile immagine) {
         Sezione sezione = sezioneRepository.findById(dto.getSezioneId())
                 .orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + dto.getSezioneId()));
 
-        // Crea un nuovo oggetto Stagione
         Stagione stagione = new Stagione();
         stagione.setTitolo(dto.getTitolo());
         stagione.setAnno(dto.getAnno());
-        stagione.setSezione(sezione); // Associa la sezione alla stagione
+        stagione.setSezione(sezione);
+
+        if (immagine != null && !immagine.isEmpty()) {
+            try {
+                Cloudinary cloudinary = getCloudinaryInstance();
+                String imageUrl = cloudinary.uploader().upload(immagine.getBytes(), ObjectUtils.emptyMap()).get("url").toString();
+                stagione.setImmagineUrl(imageUrl);
+            } catch (IOException e) {
+                throw new InternalServerErrorException("Errore durante il caricamento dell'immagine su Cloudinary.");
+            }
+        }
 
         try {
             return stagioneRepository.save(stagione);

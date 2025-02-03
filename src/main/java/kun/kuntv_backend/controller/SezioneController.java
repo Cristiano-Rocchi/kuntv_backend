@@ -2,6 +2,8 @@ package kun.kuntv_backend.controller;
 
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.enums.CollectionType;
+
+import kun.kuntv_backend.enums.TagSezione;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
 import kun.kuntv_backend.payloads.NewSezioneDTO;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
@@ -43,7 +45,10 @@ public class SezioneController {
             // Creiamo un oggetto Sezione
             Sezione sezione = new Sezione();
             sezione.setTitolo(newSezioneDTO.getTitolo());
-            sezione.setTag(newSezioneDTO.getTag());
+
+            // Convertiamo la lista di stringhe in una lista di enum
+            sezione.setTag(newSezioneDTO.getTagAsEnumList());
+
             sezione.setAnno(newSezioneDTO.getAnno());
 
             // Passiamo i dati e il file al servizio
@@ -53,11 +58,12 @@ public class SezioneController {
                     newSezioneDTO.getFile()
             );
             return ResponseEntity.status(201).body(createdSezione);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(null); // Gestione errore se il tag non è valido
         } catch (InternalServerErrorException e) {
             return ResponseEntity.status(500).body(null);
         }
     }
-
 
 
     // Modifica di una sezione esistente (solo admin)
@@ -77,4 +83,10 @@ public class SezioneController {
         }
         return ResponseEntity.notFound().build();
     }
+
+    @GetMapping("/tags")
+    public ResponseEntity<TagSezione[]> getTagSezione() {
+        return ResponseEntity.ok(TagSezione.values());
+    }
+
 }

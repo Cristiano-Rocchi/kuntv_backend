@@ -7,6 +7,7 @@ import kun.kuntv_backend.services.StagioneService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -34,20 +35,20 @@ public class StagioneController {
         return ResponseEntity.ok(stagione);
     }
 
-
     // Visualizzazione di stagioni per una sezione (user e admin)
     @GetMapping("/sezione/{sezioneId}")
     public ResponseEntity<List<Stagione>> getStagioniBySezione(@PathVariable UUID sezioneId) {
         return ResponseEntity.ok(stagioneService.getStagioniBySezioneId(sezioneId));
     }
 
-    // Creazione di una nuova stagione (solo admin)
+    // Creazione di una nuova stagione (supporta upload immagine, solo admin)
     @PreAuthorize("hasRole('admin')")
-    @PostMapping
-    public ResponseEntity<Stagione> createStagione(@RequestBody NewStagioneDTO newStagioneDTO) {
-        return ResponseEntity.ok(stagioneService.createStagione(newStagioneDTO));
+    @PostMapping(consumes = {"multipart/form-data"})
+    public ResponseEntity<Stagione> createStagione(
+            @RequestPart("data") NewStagioneDTO newStagioneDTO,
+            @RequestPart(value = "immagine", required = false) MultipartFile immagine) {
+        return ResponseEntity.ok(stagioneService.createStagione(newStagioneDTO, immagine));
     }
-
 
     // Modifica di una stagione esistente (solo admin)
     @PreAuthorize("hasRole('admin')")

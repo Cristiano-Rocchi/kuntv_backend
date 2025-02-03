@@ -7,6 +7,7 @@ import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.enums.CollectionType;
+import kun.kuntv_backend.enums.TagSezione;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
 import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
@@ -68,9 +69,7 @@ public class SezioneService {
         return sezioneRepository.findById(id).orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + id));
     }
 
-
-
-    // Creazione di una nuova sezione con caricamento immagine su Cloudinary(soloadmin)
+    // Creazione di una nuova sezione con caricamento immagine su Cloudinary(solo admin)
     public Sezione createSezione(Sezione sezione, CollectionType tipo, MultipartFile file) {
         // Ottieni o crea la Collection associata
         Collection collection = collectionRepository.findByTipo(tipo)
@@ -103,7 +102,6 @@ public class SezioneService {
                 (lastException != null ? lastException.getMessage() : "Nessun account disponibile"));
     }
 
-
     // Modifica una sezione esistente (solo admin)
     public Sezione updateSezione(UUID id, Sezione updatedSezione) {
         Sezione sezione = sezioneRepository.findById(id)
@@ -112,7 +110,7 @@ public class SezioneService {
             sezione.setTitolo(updatedSezione.getTitolo());
             sezione.setFotoUrl(updatedSezione.getFotoUrl());
             sezione.setAnno(updatedSezione.getAnno());
-            sezione.setTag(updatedSezione.getTag());
+            sezione.setTag(updatedSezione.getTag()); // Ora è una lista di TagSezione
             return sezioneRepository.save(sezione);
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore durante l'aggiornamento della sezione.");
