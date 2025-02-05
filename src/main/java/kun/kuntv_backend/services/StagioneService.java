@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -126,9 +127,12 @@ public class StagioneService {
                 stagione.getAnno(),
                 stagione.getImmagineUrl(),
                 stagione.getSezione().getTitolo(),
-                stagione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
+                stagione.getVideoList() != null
+                        ? stagione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
+                        : new ArrayList<>() // 🔥 Previene NullPointerException
         );
     }
+
 
     // 📌 Metodo per gestire l'upload su Cloudinary
     private String uploadImageToCloudinary(MultipartFile file) {
