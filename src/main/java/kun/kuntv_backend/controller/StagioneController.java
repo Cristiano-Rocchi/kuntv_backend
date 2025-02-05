@@ -22,42 +22,50 @@ public class StagioneController {
         this.stagioneService = stagioneService;
     }
 
-    // Visualizzazione di tutte le stagioni (user e admin)
+    // 📌 Ottieni tutte le stagioni (user e admin)
     @GetMapping
     public ResponseEntity<List<StagioneRespDTO>> getAllStagioni() {
         return ResponseEntity.ok(stagioneService.getAllStagioni());
     }
 
-    // Visualizzazione di una stagione per ID (user e admin)
+    // 📌 Ottieni una stagione per ID (user e admin)
     @GetMapping("/{id}")
-    public ResponseEntity<Stagione> getStagioneById(@PathVariable UUID id) {
-        Stagione stagione = stagioneService.getStagioneById(id); // Solleva NotFoundException se non trova la stagione
-        return ResponseEntity.ok(stagione);
+    public ResponseEntity<StagioneRespDTO> getStagioneById(@PathVariable UUID id) {
+        return ResponseEntity.ok(stagioneService.getStagioneById(id));
     }
 
-    // Visualizzazione di stagioni per una sezione (user e admin)
+    // 📌 Ottieni tutte le stagioni di una sezione (user e admin)
     @GetMapping("/sezione/{sezioneId}")
-    public ResponseEntity<List<Stagione>> getStagioniBySezione(@PathVariable UUID sezioneId) {
+    public ResponseEntity<List<StagioneRespDTO>> getStagioniBySezione(@PathVariable UUID sezioneId) {
         return ResponseEntity.ok(stagioneService.getStagioniBySezioneId(sezioneId));
     }
 
-    // Creazione di una nuova stagione (supporta upload immagine, solo admin)
+    // 📌 Crea una nuova stagione (supporta upload immagine, solo admin)
     @PreAuthorize("hasRole('admin')")
     @PostMapping(consumes = {"multipart/form-data"})
-    public ResponseEntity<Stagione> createStagione(
-            @RequestPart("data") NewStagioneDTO newStagioneDTO,
-            @RequestPart(value = "immagine", required = false) MultipartFile immagine) {
-        return ResponseEntity.ok(stagioneService.createStagione(newStagioneDTO, immagine));
+    public ResponseEntity<StagioneRespDTO> createStagione(
+            @RequestPart("titolo") String titolo,
+            @RequestPart("anno") String anno,
+            @RequestPart("sezioneId") UUID sezioneId,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+
+        NewStagioneDTO newStagioneDTO = new NewStagioneDTO(titolo, anno, sezioneId, null); // Il file sarà gestito nel service
+        return ResponseEntity.ok(stagioneService.createStagione(newStagioneDTO, file));
     }
 
-    // Modifica di una stagione esistente (solo admin)
+    // 📌 Modifica di una stagione (supporta upload immagine, solo admin)
     @PreAuthorize("hasRole('admin')")
-    @PutMapping("/{id}")
-    public ResponseEntity<Stagione> updateStagione(@PathVariable UUID id, @RequestBody Stagione stagione) {
-        return ResponseEntity.ok(stagioneService.updateStagione(id, stagione));
+    @PutMapping(value = "/{id}", consumes = {"multipart/form-data"})
+    public ResponseEntity<StagioneRespDTO> updateStagione(
+            @PathVariable UUID id,
+            @RequestPart("titolo") String titolo,
+            @RequestPart("anno") String anno,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+
+        return ResponseEntity.ok(stagioneService.updateStagione(id, titolo, anno, file));
     }
 
-    // Cancellazione di una stagione (solo admin)
+    // 📌 Cancella una stagione (solo admin)
     @PreAuthorize("hasRole('admin')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteStagione(@PathVariable UUID id) {

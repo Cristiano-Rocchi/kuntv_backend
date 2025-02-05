@@ -3,6 +3,7 @@ package kun.kuntv_backend.payloads;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -13,6 +14,6 @@ public class NewStagioneDTO {
     private String titolo;
     private String anno;
     private UUID sezioneId;
-    private String immagineUrl; // URL dell'immagine (opzionale)
+    private MultipartFile file; // URL dell'immagine (opzionale)
 }
 

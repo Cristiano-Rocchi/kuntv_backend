@@ -19,7 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -37,58 +36,34 @@ public class StagioneService {
     @Autowired
     private List<Cloudinary> cloudinaryAccounts;
 
-
-    // Ottieni tutte le stagioni
-    public List<StagioneRespDTO> getAllStagioni() {
-        List<Stagione> stagioni = stagioneRepository.findAll();
-        return stagioni.stream()
-                .map(stagione -> new StagioneRespDTO(
-                        stagione.getId(),
-                        stagione.getTitolo(),
-                        stagione.getAnno(),
-                        stagione.getImmagineUrl(),
-                        stagione.getSezione().getTitolo(),
-                        stagione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
-                ))
-                .collect(Collectors.toList());
-    }
-    // Ottieni i video per stagione
-    public List<VideoRespDTO> getVideosByStagioneId(UUID stagioneId) {
-        List<Video> videos = videoRepository.findByStagioneId(stagioneId);
-
-        // Converte l'elenco di Video in VideoRespDTO
-        return videos.stream()
-                .map(video -> new VideoRespDTO(
-                        video.getId(),
-                        video.getTitolo(),
-                        video.getDurata(),
-                        video.getFileLink(),
-                        video.getStagione() != null ? video.getStagione().getTitolo() : null,
-                        video.getSezione().getTitolo()
-                ))
-                .collect(Collectors.toList());
-    }
-
-
-    // Ottieni una stagione per ID
-    public Stagione getStagioneById(UUID id) {
-        return stagioneRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + id));
-    }
-
-    // Ottieni stagioni per una sezione
-    public List<Stagione> getStagioniBySezioneId(UUID sezioneId) {
-        return stagioneRepository.findBySezioneId(sezioneId);
-    }
-
-    // Crea una nuova stagione (solo admin)
-    // Metodo per scegliere un account Cloudinary in modo bilanciato
+    // 📌 Metodo per scegliere un account Cloudinary in modo bilanciato
     private Cloudinary getCloudinaryInstance() {
         return cloudinaryAccounts.get((int) (Math.random() * cloudinaryAccounts.size()));
     }
 
-    // Crea una nuova stagione (supporta upload immagine opzionale)
-    public Stagione createStagione(NewStagioneDTO dto, MultipartFile immagine) {
+    // 📌 Ottieni tutte le stagioni
+    public List<StagioneRespDTO> getAllStagioni() {
+        return stagioneRepository.findAll().stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    // 📌 Ottieni una stagione per ID
+    public StagioneRespDTO getStagioneById(UUID id) {
+        Stagione stagione = stagioneRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + id));
+        return convertToDTO(stagione);
+    }
+
+    // 📌 Ottieni stagioni per una sezione
+    public List<StagioneRespDTO> getStagioniBySezioneId(UUID sezioneId) {
+        return stagioneRepository.findBySezioneId(sezioneId).stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    // 📌 Crea una nuova stagione con supporto per immagine
+    public StagioneRespDTO createStagione(NewStagioneDTO dto, MultipartFile immagine) {
         Sezione sezione = sezioneRepository.findById(dto.getSezioneId())
                 .orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + dto.getSezioneId()));
 
@@ -98,38 +73,30 @@ public class StagioneService {
         stagione.setSezione(sezione);
 
         if (immagine != null && !immagine.isEmpty()) {
-            try {
-                Cloudinary cloudinary = getCloudinaryInstance();
-                String imageUrl = cloudinary.uploader().upload(immagine.getBytes(), ObjectUtils.emptyMap()).get("url").toString();
-                stagione.setImmagineUrl(imageUrl);
-            } catch (IOException e) {
-                throw new InternalServerErrorException("Errore durante il caricamento dell'immagine su Cloudinary.");
-            }
+            String imageUrl = uploadImageToCloudinary(immagine);
+            stagione.setImmagineUrl(imageUrl);
         }
 
-        try {
-            return stagioneRepository.save(stagione);
-        } catch (Exception e) {
-            throw new InternalServerErrorException("Errore durante la creazione della stagione.");
-        }
+        return convertToDTO(stagioneRepository.save(stagione));
     }
 
-
-    // Modifica una stagione esistente (solo admin)
-    public Stagione updateStagione(UUID id, Stagione stagione) {
-        Stagione existingStagione = stagioneRepository.findById(id)
+    // 📌 Modifica una stagione esistente (supporta cambio immagine)
+    public StagioneRespDTO updateStagione(UUID id, String titolo, String anno, MultipartFile immagine) {
+        Stagione stagione = stagioneRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + id));
-        try {
-            existingStagione.setTitolo(stagione.getTitolo());
-            existingStagione.setAnno(stagione.getAnno());
-            existingStagione.setSezione(stagione.getSezione());
-            return stagioneRepository.save(existingStagione);
-        } catch (Exception e) {
-            throw new InternalServerErrorException("Errore durante l'aggiornamento della stagione.");
+
+        stagione.setTitolo(titolo);
+        stagione.setAnno(anno);
+
+        if (immagine != null && !immagine.isEmpty()) {
+            String imageUrl = uploadImageToCloudinary(immagine);
+            stagione.setImmagineUrl(imageUrl);
         }
+
+        return convertToDTO(stagioneRepository.save(stagione));
     }
 
-    // Cancella una stagione (solo admin)
+    // 📌 Cancella una stagione e i relativi video
     public boolean deleteStagione(UUID id) {
         if (!stagioneRepository.existsById(id)) {
             throw new NotFoundException("Stagione non trovata con ID: " + id);
@@ -138,19 +105,41 @@ public class StagioneService {
             Stagione stagione = stagioneRepository.findById(id).orElse(null);
 
             if (stagione != null) {
-                // Recupera i video associati alla stagione
                 List<Video> videoList = videoRepository.findByStagioneId(id);
                 for (Video video : videoList) {
-                    // Usa il metodo del VideoService per eliminare il video dal db e da Backblaze
                     videoService.deleteVideo(video.getId());
                 }
             }
 
-            // Infine, elimina la stagione
             stagioneRepository.deleteById(id);
             return true;
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore durante la cancellazione della stagione.");
+        }
+    }
+
+    // 📌 Metodo per convertire una Stagione in StagioneRespDTO
+    private StagioneRespDTO convertToDTO(Stagione stagione) {
+        return new StagioneRespDTO(
+                stagione.getId(),
+                stagione.getTitolo(),
+                stagione.getAnno(),
+                stagione.getImmagineUrl(),
+                stagione.getSezione().getTitolo(),
+                stagione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
+        );
+    }
+
+    // 📌 Metodo per gestire l'upload su Cloudinary
+    private String uploadImageToCloudinary(MultipartFile file) {
+        try {
+            Cloudinary cloudinary = getCloudinaryInstance();
+            return cloudinary.uploader()
+                    .upload(file.getBytes(), ObjectUtils.emptyMap())
+                    .get("url")
+                    .toString();
+        } catch (IOException e) {
+            throw new InternalServerErrorException("Errore durante il caricamento dell'immagine su Cloudinary.");
         }
     }
 }
