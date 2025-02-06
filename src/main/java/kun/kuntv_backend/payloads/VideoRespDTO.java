@@ -16,5 +16,6 @@ public class VideoRespDTO {
     private String fileLink;
     private String stagioneTitolo;
     private String sezioneTitolo;
+    private String bucketName;
 }
 

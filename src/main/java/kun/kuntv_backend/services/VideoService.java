@@ -53,7 +53,7 @@ public class VideoService {
     public List<VideoRespDTO> getAllVideos() {
         return videoRepository.findAll().stream()
                 .map(video -> {
-                    //Estrai il bucket dal fileLink
+                    // Estrai il bucket dal fileLink
                     String bucketName = extractBucketNameFromUrl(video.getFileLink());
 
                     // Ottieni le credenziali per il bucket corretto
@@ -70,11 +70,13 @@ public class VideoService {
                             video.getDurata(),
                             generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey),
                             video.getStagione() != null ? video.getStagione().getTitolo() : null,
-                            video.getSezione().getTitolo()
+                            video.getSezione().getTitolo(),
+                            bucketName  // 🔹 Aggiunto il bucketName al DTO
                     );
                 })
                 .collect(Collectors.toList());
     }
+
 
     // TROVA SINGOLO VIDEO
     public Video getVideoById(UUID id) {
@@ -146,7 +148,7 @@ public class VideoService {
 
 
     // ESTRAI NOME BUCKET DALL'URL
-    private String extractBucketNameFromUrl(String fileUrl) {
+    public String extractBucketNameFromUrl(String fileUrl) {
         try {
             URI uri = new URI(fileUrl);
             String host = uri.getHost(); // Es. "kun-tv2.s3.us-east-005.backblazeb2.com"
@@ -155,7 +157,7 @@ public class VideoService {
                 throw new InternalServerErrorException("❌ URL non valido: " + fileUrl);
             }
 
-            // 🔹 Il bucket è la prima parte del dominio (es. "kun-tv2" da "kun-tv2.s3.us-east-005.backblazeb2.com")
+            // Il bucket è la prima parte del dominio (es. "kun-tv2" da "kun-tv2.s3.us-east-005.backblazeb2.com")
             String bucketName = host.split("\\.")[0];
 
             LOGGER.info("🔹 Bucket estratto dall'URL: " + bucketName);
@@ -235,7 +237,8 @@ public class VideoService {
                     savedVideo.getDurata(),
                     presignedUrl,
                     savedVideo.getStagione() != null ? savedVideo.getStagione().getTitolo() : null,
-                    savedVideo.getSezione().getTitolo()
+                    savedVideo.getSezione().getTitolo(),
+                    bucketName
             );
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore nella gestione del file: " + e.getMessage());

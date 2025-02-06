@@ -29,17 +29,24 @@ public class VideoController {
     }
 
     // Visualizzazione di un video per ID (user e admin)
+    // Visualizzazione di un video per ID (user e admin)
     @GetMapping("/{id}")
     public ResponseEntity<VideoRespDTO> getVideoById(@PathVariable UUID id) {
         Video video = videoService.getVideoById(id); // Solleva NotFoundException automaticamente
+
+        // Estrai il bucket dal fileLink
+        String bucketName = videoService.extractBucketNameFromUrl(video.getFileLink());
+
         VideoRespDTO response = new VideoRespDTO(
                 video.getId(),
                 video.getTitolo(),
                 video.getDurata(),
                 video.getFileLink(),
                 video.getStagione() != null ? video.getStagione().getTitolo() : null,
-                video.getSezione().getTitolo()
+                video.getSezione().getTitolo(),
+                bucketName // 🔹 Aggiunto il bucket
         );
+
         return ResponseEntity.ok(response);
     }
 
