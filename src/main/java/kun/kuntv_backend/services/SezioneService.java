@@ -47,8 +47,33 @@ public class SezioneService {
     private List<Cloudinary> cloudinaryAccounts;
 
     // Ottieni tutte le sezioni (accessibile da tutti)
-    public List<SezioneRespDTO> getAllSezioni() {
-        List<Sezione> sezioni = sezioneRepository.findAll();
+    public List<SezioneRespDTO> getAllSezioni(String titolo, List<String> tagStrings, String anno) {
+        List<Sezione> sezioni;
+
+        // Se sono stati selezionati più tag
+        if (tagStrings != null && !tagStrings.isEmpty()) {
+            List<TagSezione> tagEnumList = tagStrings.stream()
+                    .map(TagSezione::valueOf) // Convertiamo le stringhe nei rispettivi ENUM
+                    .collect(Collectors.toList());
+
+            // Usa il metodo che cerca le sezioni con tutti i tag
+            sezioni = sezioneRepository.findByMultipleTags(tagEnumList, tagEnumList.size());
+        } else {
+            // Se non ci sono tag filtriamo tutto
+            sezioni = sezioneRepository.findAll();
+        }
+
+        // Filtra per titolo se specificato
+        if (titolo != null && !titolo.isEmpty()) {
+            sezioni.retainAll(sezioneRepository.findByTitoloContainingIgnoreCase(titolo));
+        }
+
+        // Filtra per anno se specificato
+        if (anno != null && !anno.isEmpty()) {
+            sezioni.retainAll(sezioneRepository.findByAnno(anno));
+        }
+
+        // Convertiamo le entità in DTO
         return sezioni.stream()
                 .map(sezione -> new SezioneRespDTO(
                         sezione.getId(),
@@ -58,8 +83,8 @@ public class SezioneService {
                         sezione.getAnno(),
                         sezione.getStagioni().stream().map(Stagione::getTitolo).collect(Collectors.toList()),
                         sezione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList()),
-                        sezione.getCollection().getId(), // Aggiungiamo l'ID della Collection
-                        sezione.getCollection().getTipo().name() // Aggiungiamo il tipo della Collection
+                        sezione.getCollection().getId(),
+                        sezione.getCollection().getTipo().name()
                 ))
                 .collect(Collectors.toList());
     }

@@ -26,9 +26,15 @@ public class SezioneController {
 
     // Visualizzazione di tutte le sezioni (user e admin)
     @GetMapping
-    public ResponseEntity<List<SezioneRespDTO>> getAllSezioni() {
-        return ResponseEntity.ok(sezioneService.getAllSezioni());
+    public ResponseEntity<List<SezioneRespDTO>> getAllSezioni(
+            @RequestParam(required = false) String titolo,
+            @RequestParam(required = false) List<String> tag,
+            @RequestParam(required = false) String anno) {
+
+        List<SezioneRespDTO> sezioni = sezioneService.getAllSezioni(titolo, tag, anno);
+        return ResponseEntity.ok(sezioni);
     }
+
 
     // Visualizzazione di una sezione per ID (user e admin)
     @GetMapping("/{id}")
