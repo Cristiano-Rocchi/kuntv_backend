@@ -71,15 +71,17 @@ public class VideoService {
                             generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey),
                             video.getStagione() != null ? video.getStagione().getTitolo() : null,
                             video.getSezione().getTitolo(),
-                            bucketName  // 🔹 Aggiunto il bucketName al DTO
+                            bucketName,
+                            video.getDataCaricamento()
                     );
                 })
                 .collect(Collectors.toList());
     }
 
 
+
     // TROVA SINGOLO VIDEO
-    public Video getVideoById(UUID id) {
+    public VideoRespDTO getVideoById(UUID id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("ID del video non valido: " + id));
 
@@ -94,10 +96,21 @@ public class VideoService {
             throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + bucketName);
         }
 
-        // Genera il link firmato e aggiorna il fileLink del video
-        video.setFileLink(generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey));
-        return video;
+        // Genera il link firmato
+        String presignedUrl = generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey);
+
+        return new VideoRespDTO(
+                video.getId(),
+                video.getTitolo(),
+                video.getDurata(),
+                presignedUrl,
+                video.getStagione() != null ? video.getStagione().getTitolo() : null,
+                video.getSezione().getTitolo(),
+                bucketName,
+                video.getDataCaricamento() // 🔹 Aggiunto dataCaricamento
+        );
     }
+
 
     //MODIFICA VIDEO
     public Video updateVideo(UUID id, Video updatedVideo) {
@@ -238,7 +251,8 @@ public class VideoService {
                     presignedUrl,
                     savedVideo.getStagione() != null ? savedVideo.getStagione().getTitolo() : null,
                     savedVideo.getSezione().getTitolo(),
-                    bucketName
+                    bucketName,
+                    savedVideo.getDataCaricamento()
             );
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore nella gestione del file: " + e.getMessage());

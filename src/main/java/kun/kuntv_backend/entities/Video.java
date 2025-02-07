@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -29,6 +30,8 @@ public class Video {
     @Column(nullable = false, length = 1000)
     private String fileLink;
 
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime dataCaricamento = LocalDateTime.now();
     @ManyToOne
     @JoinColumn(name = "sezione_id", nullable = false)
     @JsonBackReference("sezione-video")

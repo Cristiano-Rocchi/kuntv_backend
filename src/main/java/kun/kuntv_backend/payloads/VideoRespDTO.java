@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Getter
@@ -17,5 +18,6 @@ public class VideoRespDTO {
     private String stagioneTitolo;
     private String sezioneTitolo;
     private String bucketName;
+    private LocalDateTime dataCaricamento;
 }
 

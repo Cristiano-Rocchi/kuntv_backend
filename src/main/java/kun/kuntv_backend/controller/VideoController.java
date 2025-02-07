@@ -3,6 +3,7 @@ package kun.kuntv_backend.controller;
 import kun.kuntv_backend.entities.Video;
 import kun.kuntv_backend.payloads.NewVideoDTO;
 import kun.kuntv_backend.payloads.VideoRespDTO;
+import kun.kuntv_backend.repositories.VideoRepository;
 import kun.kuntv_backend.services.VideoService;
 import kun.kuntv_backend.exceptions.NotFoundException;
 import kun.kuntv_backend.exceptions.InternalServerErrorException;
@@ -22,33 +23,23 @@ public class VideoController {
     @Autowired
     private VideoService videoService;
 
+    @Autowired
+    private VideoRepository videoRepository;
+
     // Visualizzazione di tutti i video (user e admin)
     @GetMapping
     public ResponseEntity<List<VideoRespDTO>> getAllVideos() {
         return ResponseEntity.ok(videoService.getAllVideos());
     }
 
-    // Visualizzazione di un video per ID (user e admin)
+
     // Visualizzazione di un video per ID (user e admin)
     @GetMapping("/{id}")
     public ResponseEntity<VideoRespDTO> getVideoById(@PathVariable UUID id) {
-        Video video = videoService.getVideoById(id); // Solleva NotFoundException automaticamente
-
-        // Estrai il bucket dal fileLink
-        String bucketName = videoService.extractBucketNameFromUrl(video.getFileLink());
-
-        VideoRespDTO response = new VideoRespDTO(
-                video.getId(),
-                video.getTitolo(),
-                video.getDurata(),
-                video.getFileLink(),
-                video.getStagione() != null ? video.getStagione().getTitolo() : null,
-                video.getSezione().getTitolo(),
-                bucketName // 🔹 Aggiunto il bucket
-        );
-
+        VideoRespDTO response = videoService.getVideoById(id); // Ora usa direttamente il DTO
         return ResponseEntity.ok(response);
     }
+
 
     // Creazione di un nuovo video con caricamento su Cloudinary (solo admin)
     @PostMapping("/upload")
@@ -85,7 +76,9 @@ public class VideoController {
     public ResponseEntity<Video> updateVideo(@PathVariable UUID id, @RequestBody Video video) {
         try {
             // Recupera il video esistente
-            Video existingVideo = videoService.getVideoById(id);
+            Video existingVideo = videoRepository.findById(id)
+                    .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
+
 
             // Aggiorna solo i campi forniti
             if (video.getTitolo() != null) {
