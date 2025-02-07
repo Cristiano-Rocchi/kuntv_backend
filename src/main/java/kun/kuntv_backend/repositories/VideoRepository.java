@@ -9,9 +9,16 @@ import java.util.UUID;
 
 @Repository
 public interface VideoRepository extends JpaRepository<Video, UUID> {
+
     // Metodo per trovare video per una sezione
     List<Video> findBySezioneId(UUID sezioneId);
 
-    // Metodo per trovare video per una stagione (opzionale, se stagioni sono definite)
+    // Metodo per trovare video per una stagione
     List<Video> findByStagioneId(UUID stagioneId);
+
+    // 🔹 Metodi per la ricerca avanzata
+    List<Video> findByTitoloContainingIgnoreCase(String titolo);
+    List<Video> findBySezione_TitoloContainingIgnoreCase(String sezioneTitolo);
+    List<Video> findByStagione_TitoloContainingIgnoreCase(String stagioneTitolo);
+    List<Video> findByFileLinkContainingIgnoreCase(String bucketName);
 }

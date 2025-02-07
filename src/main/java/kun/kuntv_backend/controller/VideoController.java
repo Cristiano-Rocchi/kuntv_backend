@@ -28,8 +28,14 @@ public class VideoController {
 
     // Visualizzazione di tutti i video (user e admin)
     @GetMapping
-    public ResponseEntity<List<VideoRespDTO>> getAllVideos() {
-        return ResponseEntity.ok(videoService.getAllVideos());
+    public ResponseEntity<List<VideoRespDTO>> getAllVideos(
+            @RequestParam(required = false) String titolo,
+            @RequestParam(required = false) String sezione,
+            @RequestParam(required = false) String stagione,
+            @RequestParam(required = false) String bucket) {
+
+        List<VideoRespDTO> videos = videoService.getAllVideos(titolo, sezione, stagione, bucket);
+        return ResponseEntity.ok(videos);
     }
 
 

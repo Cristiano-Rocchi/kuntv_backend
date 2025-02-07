@@ -50,8 +50,23 @@ public class VideoService {
     private Map<String, String> keyIdMapping;
 
     //TROVA TUTTI I VIDEO
-    public List<VideoRespDTO> getAllVideos() {
-        return videoRepository.findAll().stream()
+    public List<VideoRespDTO> getAllVideos(String titolo, String sezione, String stagione, String bucket) {
+        List<Video> filteredVideos = videoRepository.findAll();
+
+        if (titolo != null && !titolo.isEmpty()) {
+            filteredVideos.retainAll(videoRepository.findByTitoloContainingIgnoreCase(titolo));
+        }
+        if (sezione != null && !sezione.isEmpty()) {
+            filteredVideos.retainAll(videoRepository.findBySezione_TitoloContainingIgnoreCase(sezione));
+        }
+        if (stagione != null && !stagione.isEmpty()) {
+            filteredVideos.retainAll(videoRepository.findByStagione_TitoloContainingIgnoreCase(stagione));
+        }
+        if (bucket != null && !bucket.isEmpty()) {
+            filteredVideos.retainAll(videoRepository.findByFileLinkContainingIgnoreCase(bucket));
+        }
+
+        return filteredVideos.stream()
                 .map(video -> {
                     // Estrai il bucket dal fileLink
                     String bucketName = extractBucketNameFromUrl(video.getFileLink());
@@ -77,6 +92,7 @@ public class VideoService {
                 })
                 .collect(Collectors.toList());
     }
+
 
 
 
