@@ -2,6 +2,10 @@ package kun.kuntv_backend.services;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
+import jakarta.annotation.PostConstruct;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.transaction.Transactional;
 import kun.kuntv_backend.entities.Collection;
 import kun.kuntv_backend.entities.Sezione;
 import kun.kuntv_backend.entities.Stagione;
@@ -16,6 +20,8 @@ import kun.kuntv_backend.repositories.SezioneRepository;
 import kun.kuntv_backend.repositories.StagioneRepository;
 import kun.kuntv_backend.repositories.VideoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -45,6 +51,9 @@ public class SezioneService {
 
     @Autowired
     private List<Cloudinary> cloudinaryAccounts;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     // Ottieni tutte le sezioni (accessibile da tutti)
     public List<SezioneRespDTO> getAllSezioni(String titolo, List<String> tagStrings, String anno) {
@@ -165,4 +174,32 @@ public class SezioneService {
             throw new InternalServerErrorException("Errore durante la cancellazione della sezione.");
         }
     }
+
+
+
+    // aggiorna gli enum tag
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void updateTagConstraint() {
+        // Ottieni tutti i valori dell'enum TagSezione
+        String enumValues = String.join("', '",
+                java.util.Arrays.stream(TagSezione.values())
+                        .map(Enum::name)
+                        .toArray(String[]::new));
+
+        // Query per eliminare il vecchio vincolo
+        String dropConstraintQuery = "ALTER TABLE sezione_tag DROP CONSTRAINT IF EXISTS sezione_tag_tag_check";
+
+        // Query per creare il nuovo vincolo con gli ENUM aggiornati
+        String addConstraintQuery = "ALTER TABLE sezione_tag ADD CONSTRAINT sezione_tag_tag_check " +
+                "CHECK (tag IN ('" + enumValues + "'))";
+
+        // Esegui le query dentro una transazione attiva
+        entityManager.createNativeQuery(dropConstraintQuery).executeUpdate();
+        entityManager.createNativeQuery(addConstraintQuery).executeUpdate();
+
+
+    }
+
+
 }
