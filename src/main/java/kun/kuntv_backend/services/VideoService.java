@@ -320,13 +320,21 @@ public class VideoService {
         }
 
         for (String bucket : buckets) {
-            if (hasAvailableSpace(bucket, fileSize)) {
-                LOGGER.info("✅ Bucket selezionato con spazio disponibile: " + bucket);
+            long spazioUsato = getUsedStorage(bucket);
+            long spazioTotale = 10_000_000_000L; // 10 GB per ogni account
+            long spazioDisponibile = spazioTotale - spazioUsato;
+
+            LOGGER.info("📦 Bucket: " + bucket + " | Spazio usato: " + spazioUsato + " bytes | Spazio disponibile: " + spazioDisponibile + " bytes");
+
+            if (fileSize <= spazioDisponibile) {
+                LOGGER.info("✅ Spazio sufficiente nel bucket " + bucket + " (" + spazioDisponibile + " bytes disponibili)");
                 return bucket;
+            } else {
+                LOGGER.warning("⚠ Spazio insufficiente nel bucket " + bucket + ": richiede " + fileSize + " bytes, ma ne restano solo " + spazioDisponibile);
             }
         }
 
-        throw new InternalServerErrorException("❌ Nessun bucket ha spazio sufficiente per il file di " + fileSize + " byte.");
+        throw new InternalServerErrorException("❌ Nessun bucket ha spazio sufficiente per il file di " + fileSize + " bytes.");
     }
 
 
