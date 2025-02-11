@@ -1,5 +1,5 @@
 package kun.kuntv_backend.enums;
 
 public enum TagSezione {
-    DOCUMENTARIO, DRAMMATICO, SATIRA, BLACK_COMEDY
+    DOCUMENTARIO, DRAMMATICO, SATIRA, BLACK_COMEDY, FANTASCIENZA, AVVENTURA
 }
