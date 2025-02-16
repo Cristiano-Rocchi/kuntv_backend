@@ -22,7 +22,7 @@ public class Sezione {
     @Setter(AccessLevel.NONE)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String titolo;
 
     @Column(nullable = false)

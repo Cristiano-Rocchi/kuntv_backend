@@ -103,6 +103,12 @@ public class SezioneService {
         return sezioneRepository.findById(id).orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + id));
     }
 
+    //Ottieni una sezione per titolo (accessibile da tutti)
+    public Sezione getSezioneByTitolo(String titolo) {
+        return sezioneRepository.findByTitoloIgnoreCase(titolo)
+                .orElseThrow(() -> new NotFoundException("Sezione non trovata"));
+    }
+
     // Creazione di una nuova sezione con caricamento immagine su Cloudinary(solo admin)
     public Sezione createSezione(Sezione sezione, CollectionType tipo, MultipartFile file) {
         // Ottieni o crea la Collection associata

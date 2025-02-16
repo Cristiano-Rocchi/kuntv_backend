@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -23,6 +24,8 @@ public interface SezioneRepository extends JpaRepository<Sezione, UUID> {
 
     // Cerca sezioni per titolo (ignorando maiuscole e minuscole)
     List<Sezione> findByTitoloContainingIgnoreCase(String titolo);
+    Optional<Sezione> findByTitoloIgnoreCase(String titolo);
+
 
     // Cerca sezioni per anno
     List<Sezione> findByAnno(String anno);

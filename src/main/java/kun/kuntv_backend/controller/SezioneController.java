@@ -42,6 +42,13 @@ public class SezioneController {
         Sezione sezione = sezioneService.getSezioneById(id);
         return ResponseEntity.ok(sezione);
     }
+    // Visualizza sezione per TITOLO
+    @GetMapping("/titolo/{titolo}")
+    public ResponseEntity<Sezione> getSezioneByTitolo(@PathVariable String titolo) {
+        Sezione sezione = sezioneService.getSezioneByTitolo(titolo);
+        return ResponseEntity.ok(sezione);
+    }
+
 
     // Creazione di una sezione associata a una Collection (solo admin)
     @PostMapping

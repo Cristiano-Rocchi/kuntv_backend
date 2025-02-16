@@ -33,12 +33,23 @@ public class BackblazeB2Config {
     @Value("${backblaze.b2.applicationKey.2}")
     private String applicationKey2;
 
+    @Value("${backblaze.b2.bucketName.3}")
+    private String bucketName3;
+
+    @Value("${backblaze.b2.keyId.3}")
+    private String keyId3;
+
+    @Value("${backblaze.b2.applicationKey.3}")
+    private String applicationKey3;
+
+
     @Bean
     public Map<String, S3Client> backblazeAccounts() {
         Map<String, S3Client> accounts = new HashMap<>();
 
         accounts.put(bucketName1, createS3Client(keyId1, applicationKey1));
         accounts.put(bucketName2, createS3Client(keyId2, applicationKey2));
+        accounts.put(bucketName3, createS3Client(keyId3, applicationKey3));
 
         return accounts;
     }
@@ -56,6 +67,7 @@ public class BackblazeB2Config {
         Map<String, String> map = new HashMap<>();
         map.put(bucketName1, keyId1);
         map.put(bucketName2, keyId2);
+        map.put(bucketName3, keyId3);
         return map;
     }
 
@@ -64,6 +76,8 @@ public class BackblazeB2Config {
         Map<String, String> map = new HashMap<>();
         map.put(bucketName1, applicationKey1);
         map.put(bucketName2, applicationKey2);
+        map.put(bucketName3, applicationKey3);
+
         return map;
     }
 }
