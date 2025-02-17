@@ -9,6 +9,7 @@ import kun.kuntv_backend.payloads.NewSezioneDTO;
 import kun.kuntv_backend.payloads.SezioneRespDTO;
 import kun.kuntv_backend.services.SezioneService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -81,11 +82,18 @@ public class SezioneController {
 
     // Modifica di una sezione esistente (solo admin)
     @PreAuthorize("hasRole('admin')")
-    @PutMapping("/{id}")
-    public ResponseEntity<Sezione> updateSezione(@PathVariable UUID id, @RequestBody Sezione sezione) {
-        Sezione updatedSezione = sezioneService.updateSezione(id, sezione);
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Sezione> updateSezione(
+            @PathVariable UUID id,
+            @RequestParam(value = "titolo", required = false) String titolo,
+            @RequestParam(value = "anno", required = false) String anno,
+            @RequestParam(value = "tag", required = false) List<TagSezione> tag,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
+
+        Sezione updatedSezione = sezioneService.updateSezione(id, titolo, anno, tag, file);
         return ResponseEntity.ok(updatedSezione);
     }
+
 
     // Cancellazione di una sezione (solo admin)
     @PreAuthorize("hasRole('admin')")

@@ -143,19 +143,43 @@ public class SezioneService {
     }
 
     // Modifica una sezione esistente (solo admin)
-    public Sezione updateSezione(UUID id, Sezione updatedSezione) {
+    public Sezione updateSezione(UUID id, String titolo, String anno, List<TagSezione> tag, MultipartFile file) {
         Sezione sezione = sezioneRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Sezione non trovata con ID: " + id));
+
         try {
-            sezione.setTitolo(updatedSezione.getTitolo());
-            sezione.setFotoUrl(updatedSezione.getFotoUrl());
-            sezione.setAnno(updatedSezione.getAnno());
-            sezione.setTag(updatedSezione.getTag()); // Ora è una lista di TagSezione
+            // ✅ Aggiorna solo i campi inviati (gli altri restano invariati)
+            if (titolo != null) sezione.setTitolo(titolo);
+            if (anno != null) sezione.setAnno(anno);
+            if (tag != null) sezione.setTag(tag);
+
+            if (file != null && !file.isEmpty()) {
+                Exception lastException = null;
+                for (Cloudinary cloudinary : cloudinaryAccounts) {
+                    try {
+                        // Carica solo se una nuova immagine è stata fornita
+                        Map<String, Object> uploadResult = cloudinary.uploader().upload(file.getBytes(),
+                                ObjectUtils.asMap("resource_type", "image"));
+
+                        // ✅ Aggiorna solo se il caricamento ha successo
+                        String newFotoUrl = (String) uploadResult.get("secure_url");
+                        sezione.setFotoUrl(newFotoUrl);
+                        break; // Se il caricamento è ok, interrompi il loop
+                    } catch (IOException e) {
+                        lastException = e;
+                    }
+                }
+                if (sezione.getFotoUrl() == null) {
+                    throw new InternalServerErrorException("Errore nel caricamento dell'immagine su Cloudinary.");
+                }
+            }
+
             return sezioneRepository.save(sezione);
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore durante l'aggiornamento della sezione.");
         }
     }
+
 
     // Cancella una sezione (solo admin)
     public boolean deleteSezione(UUID id) {
