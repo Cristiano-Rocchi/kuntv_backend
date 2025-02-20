@@ -11,4 +11,13 @@ import java.util.UUID;
 public interface StagioneRepository extends JpaRepository<Stagione, UUID> {
     // Metodo per trovare stagioni per una sezione
     List<Stagione> findBySezioneId(UUID sezioneId);
+
+    // Trova stagioni che contengono una certa stringa nel titolo
+    List<Stagione> findByTitoloContainingIgnoreCase(String titolo);
+
+    // Trova stagioni per una specifica sezione
+    List<Stagione> findBySezione_TitoloContainingIgnoreCase(String sezioneTitolo);
+
+    // Trova stagioni per anno
+    List<Stagione> findByAnnoContainingIgnoreCase(String anno);
 }

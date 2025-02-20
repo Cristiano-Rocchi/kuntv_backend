@@ -24,9 +24,13 @@ public class StagioneController {
 
     // 📌 Ottieni tutte le stagioni
     @GetMapping
-    public ResponseEntity<List<StagioneRespDTO>> getAllStagioni() {
-        return ResponseEntity.ok(stagioneService.getAllStagioni());
+    public ResponseEntity<List<StagioneRespDTO>> getAllStagioni(
+            @RequestParam(required = false) String titolo,
+            @RequestParam(required = false) String sezione,
+            @RequestParam(required = false) String anno) {
+        return ResponseEntity.ok(stagioneService.getAllStagioni(titolo, sezione, anno));
     }
+
 
     // 📌 Ottieni una stagione per ID
     @GetMapping("/{id}")

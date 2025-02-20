@@ -43,11 +43,24 @@ public class StagioneService {
     }
 
     // 📌 Ottieni tutte le stagioni
-    public List<StagioneRespDTO> getAllStagioni() {
-        return stagioneRepository.findAll().stream()
+    public List<StagioneRespDTO> getAllStagioni(String titolo, String sezione, String anno) {
+        List<Stagione> filteredStagioni = stagioneRepository.findAll();
+
+        if (titolo != null && !titolo.isEmpty()) {
+            filteredStagioni.retainAll(stagioneRepository.findByTitoloContainingIgnoreCase(titolo));
+        }
+        if (sezione != null && !sezione.isEmpty()) {
+            filteredStagioni.retainAll(stagioneRepository.findBySezione_TitoloContainingIgnoreCase(sezione));
+        }
+        if (anno != null && !anno.isEmpty()) {
+            filteredStagioni.retainAll(stagioneRepository.findByAnnoContainingIgnoreCase(anno));
+        }
+
+        return filteredStagioni.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }
+
 
     // 📌 Ottieni una stagione per ID
     public StagioneRespDTO getStagioneById(UUID id) {
@@ -82,13 +95,20 @@ public class StagioneService {
     }
 
     // 📌 Modifica una stagione esistente (supporta cambio immagine)
+    // 📌 Modifica una stagione esistente (supporta cambio immagine e aggiornamento parziale)
     public StagioneRespDTO updateStagione(UUID id, String titolo, String anno, MultipartFile immagine) {
         Stagione stagione = stagioneRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + id));
 
-        stagione.setTitolo(titolo);
-        stagione.setAnno(anno);
+        // 🔹 Aggiorna solo i campi forniti (se non null o vuoti)
+        if (titolo != null && !titolo.isEmpty()) {
+            stagione.setTitolo(titolo);
+        }
+        if (anno != null && !anno.isEmpty()) {
+            stagione.setAnno(anno);
+        }
 
+        // 🔹 Se viene fornita una nuova immagine, sostituisci quella esistente
         if (immagine != null && !immagine.isEmpty()) {
             String imageUrl = uploadImageToCloudinary(immagine);
             stagione.setImmagineUrl(imageUrl);
