@@ -83,10 +83,11 @@ public class VideoController {
             @PathVariable UUID id,
             @RequestParam(required = false) String titolo,
             @RequestParam(required = false) String durata,
+            @RequestParam(required = false) UUID stagioneId,
             @RequestParam(required = false) MultipartFile file
     ) {
         try {
-            VideoRespDTO updatedVideo = videoService.updateVideo(id, titolo, durata, file);
+            VideoRespDTO updatedVideo = videoService.updateVideo(id, titolo, durata, stagioneId, file);
             return ResponseEntity.ok(updatedVideo);
         } catch (NotFoundException e) {
             return ResponseEntity.status(404).body(null); // Video non trovato

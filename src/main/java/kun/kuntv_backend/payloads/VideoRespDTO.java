@@ -16,7 +16,9 @@ public class VideoRespDTO {
     private String durata;
     private String fileLink;
     private String stagioneTitolo;
+    private UUID stagioneId;
     private String sezioneTitolo;
+    private UUID sezioneId;
     private String bucketName;
     private LocalDateTime dataCaricamento;
 }

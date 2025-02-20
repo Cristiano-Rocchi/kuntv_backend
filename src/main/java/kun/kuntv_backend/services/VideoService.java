@@ -85,7 +85,9 @@ public class VideoService {
                             video.getDurata(),
                             generatePresignedUrl(video.getFileLink(), bucketName, keyId, applicationKey),
                             video.getStagione() != null ? video.getStagione().getTitolo() : null,
+                            video.getStagione() != null ? video.getStagione().getId() : null, // 🔹 Aggiunto ID della stagione
                             video.getSezione().getTitolo(),
+                            video.getSezione().getId(), // 🔹 Aggiunto ID della sezione
                             bucketName,
                             video.getDataCaricamento()
                     );
@@ -121,24 +123,34 @@ public class VideoService {
                 video.getDurata(),
                 presignedUrl,
                 video.getStagione() != null ? video.getStagione().getTitolo() : null,
+                video.getStagione() != null ? video.getStagione().getId() : null, // 🔹 Aggiunto ID della stagione
                 video.getSezione().getTitolo(),
+                video.getSezione().getId(), // 🔹 Aggiunto ID della sezione
                 bucketName,
-                video.getDataCaricamento() // 🔹 Aggiunto dataCaricamento
+                video.getDataCaricamento()
         );
     }
 
 
+
     //MODIFICA VIDEO
-    public VideoRespDTO updateVideo(UUID id, String titolo, String durata, MultipartFile file) {
+    public VideoRespDTO updateVideo(UUID id, String titolo, String durata, UUID stagioneId, MultipartFile file) {
         Video existingVideo = videoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
 
-        // Aggiorna i campi solo se forniti
+        // Aggiorna titolo e durata solo se forniti
         if (titolo != null && !titolo.isEmpty()) {
             existingVideo.setTitolo(titolo);
         }
         if (durata != null && !durata.isEmpty()) {
             existingVideo.setDurata(durata);
+        }
+
+        // Se viene fornito un nuovo stagioneId, aggiorna la stagione del video
+        if (stagioneId != null) {
+            Stagione nuovaStagione = stagioneRepository.findById(stagioneId)
+                    .orElseThrow(() -> new NotFoundException("Stagione non trovata con ID: " + stagioneId));
+            existingVideo.setStagione(nuovaStagione);
         }
 
         // Se viene fornito un nuovo file, aggiorna il file su Backblaze B2
@@ -151,7 +163,6 @@ public class VideoService {
 
                 // Comprimi il video
                 File compressedFile = compressVideo(tempFile);
-                long fileSize = compressedFile.length();
 
                 // Estrai il bucket attuale dal fileLink esistente
                 String bucketName = extractBucketNameFromUrl(existingVideo.getFileLink());
@@ -199,7 +210,9 @@ public class VideoService {
                 updatedVideo.getDurata(),
                 presignedUrl,
                 updatedVideo.getStagione() != null ? updatedVideo.getStagione().getTitolo() : null,
+                updatedVideo.getStagione() != null ? updatedVideo.getStagione().getId() : null,
                 updatedVideo.getSezione().getTitolo(),
+                updatedVideo.getSezione().getId(),
                 extractBucketNameFromUrl(updatedVideo.getFileLink()),
                 updatedVideo.getDataCaricamento()
         );
@@ -328,10 +341,13 @@ public class VideoService {
                     savedVideo.getDurata(),
                     presignedUrl,
                     savedVideo.getStagione() != null ? savedVideo.getStagione().getTitolo() : null,
+                    savedVideo.getStagione() != null ? savedVideo.getStagione().getId() : null, // 🔹 Aggiunto stagioneId
                     savedVideo.getSezione().getTitolo(),
+                    savedVideo.getSezione().getId(), // 🔹 Aggiunto sezioneId
                     bucketName,
                     savedVideo.getDataCaricamento()
             );
+
         } catch (Exception e) {
             throw new InternalServerErrorException("Errore nella gestione del file: " + e.getMessage());
         } finally {

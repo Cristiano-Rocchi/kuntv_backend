@@ -127,6 +127,7 @@ public class StagioneService {
                 stagione.getAnno(),
                 stagione.getImmagineUrl(),
                 stagione.getSezione().getTitolo(),
+                stagione.getSezione().getId(),
                 stagione.getVideoList() != null
                         ? stagione.getVideoList().stream().map(Video::getTitolo).collect(Collectors.toList())
                         : new ArrayList<>() // 🔥 Previene NullPointerException
