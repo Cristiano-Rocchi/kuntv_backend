@@ -79,28 +79,19 @@ public class VideoController {
     // Modifica di un video esistente (solo admin)
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('admin')")
-    public ResponseEntity<Video> updateVideo(@PathVariable UUID id, @RequestBody Video video) {
+    public ResponseEntity<VideoRespDTO> updateVideo(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String titolo,
+            @RequestParam(required = false) String durata,
+            @RequestParam(required = false) MultipartFile file
+    ) {
         try {
-            // Recupera il video esistente
-            Video existingVideo = videoRepository.findById(id)
-                    .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
-
-
-            // Aggiorna solo i campi forniti
-            if (video.getTitolo() != null) {
-                existingVideo.setTitolo(video.getTitolo());
-            }
-            if (video.getDurata() != null) {
-                existingVideo.setDurata(video.getDurata());
-            }
-
-            // Salva e restituisci il video aggiornato
-            Video updatedVideo = videoService.updateVideo(id, existingVideo);
+            VideoRespDTO updatedVideo = videoService.updateVideo(id, titolo, durata, file);
             return ResponseEntity.ok(updatedVideo);
         } catch (NotFoundException e) {
-            return ResponseEntity.status(404).build(); // Video non trovato
+            return ResponseEntity.status(404).body(null); // Video non trovato
         } catch (Exception e) {
-            return ResponseEntity.status(500).build(); // Errore interno
+            return ResponseEntity.status(500).body(null); // Errore interno
         }
     }
 

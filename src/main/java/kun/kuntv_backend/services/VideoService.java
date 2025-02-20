@@ -129,18 +129,80 @@ public class VideoService {
 
 
     //MODIFICA VIDEO
-    public Video updateVideo(UUID id, Video updatedVideo) {
+    public VideoRespDTO updateVideo(UUID id, String titolo, String durata, MultipartFile file) {
         Video existingVideo = videoRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Video non trovato con ID: " + id));
 
-        if (updatedVideo.getTitolo() != null) {
-            existingVideo.setTitolo(updatedVideo.getTitolo());
+        // Aggiorna i campi solo se forniti
+        if (titolo != null && !titolo.isEmpty()) {
+            existingVideo.setTitolo(titolo);
         }
-        if (updatedVideo.getDurata() != null) {
-            existingVideo.setDurata(updatedVideo.getDurata());
+        if (durata != null && !durata.isEmpty()) {
+            existingVideo.setDurata(durata);
         }
 
-        return videoRepository.save(existingVideo);
+        // Se viene fornito un nuovo file, aggiorna il file su Backblaze B2
+        if (file != null && !file.isEmpty()) {
+            try {
+                File tempFile = File.createTempFile("upload_", file.getOriginalFilename());
+                try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+                    fos.write(file.getBytes());
+                }
+
+                // Comprimi il video
+                File compressedFile = compressVideo(tempFile);
+                long fileSize = compressedFile.length();
+
+                // Estrai il bucket attuale dal fileLink esistente
+                String bucketName = extractBucketNameFromUrl(existingVideo.getFileLink());
+
+                S3Client s3Client = backblazeAccounts.get(bucketName);
+                if (s3Client == null) {
+                    throw new InternalServerErrorException("❌ Nessun client S3 trovato per il bucket: " + bucketName);
+                }
+
+                // Elimina il file precedente
+                String oldFileName = existingVideo.getFileLink().substring(existingVideo.getFileLink().lastIndexOf("/") + 1);
+                DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(oldFileName)
+                        .build();
+                s3Client.deleteObject(deleteRequest);
+
+                // Carica il nuovo file
+                String newFileUrl = uploadToBackblazeB2(s3Client, bucketName, compressedFile);
+                existingVideo.setFileLink(newFileUrl);
+
+                // Pulisce i file temporanei
+                tempFile.delete();
+                compressedFile.delete();
+            } catch (Exception e) {
+                throw new InternalServerErrorException("Errore durante l'aggiornamento del file video: " + e.getMessage());
+            }
+        }
+
+        Video updatedVideo = videoRepository.save(existingVideo);
+
+        // Genera il presigned URL aggiornato
+        String keyId = backblazeB2Config.keyIdMapping().get(extractBucketNameFromUrl(updatedVideo.getFileLink()));
+        String applicationKey = backblazeB2Config.applicationKeyMapping().get(extractBucketNameFromUrl(updatedVideo.getFileLink()));
+
+        if (keyId == null || applicationKey == null) {
+            throw new InternalServerErrorException("❌ Credenziali Backblaze mancanti per il bucket: " + extractBucketNameFromUrl(updatedVideo.getFileLink()));
+        }
+
+        String presignedUrl = generatePresignedUrl(updatedVideo.getFileLink(), extractBucketNameFromUrl(updatedVideo.getFileLink()), keyId, applicationKey);
+
+        return new VideoRespDTO(
+                updatedVideo.getId(),
+                updatedVideo.getTitolo(),
+                updatedVideo.getDurata(),
+                presignedUrl,
+                updatedVideo.getStagione() != null ? updatedVideo.getStagione().getTitolo() : null,
+                updatedVideo.getSezione().getTitolo(),
+                extractBucketNameFromUrl(updatedVideo.getFileLink()),
+                updatedVideo.getDataCaricamento()
+        );
     }
 
     //ELIMINA VIDEO
